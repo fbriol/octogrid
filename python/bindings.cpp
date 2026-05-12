@@ -65,21 +65,19 @@ FloatOut batch_interp(const CompressedField &f, DoubleArray lat,
     throw std::invalid_argument("lat and lon must have same length");
   const std::size_t n = lat.size();
 
-  // Allocate the output and bind its lifetime to a Python-owned capsule so
-  // that nanobind hands NumPy a buffer it can free independently.
-  float *data = new float[n];
-  nb::capsule owner(data,
-                    [](void *p) noexcept { delete[] static_cast<float *>(p); });
-
+  // Use a unique_ptr so that any exception thrown below cleans the buffer
+  // without colliding with the capsule deleter we attach on success.
+  std::unique_ptr<float[]> buf(new float[n]);
   if (method == "barycentric") {
-    interp_barycentric_batch(f, lat.data(), lon.data(), n, data);
+    interp_barycentric_batch(f, lat.data(), lon.data(), n, buf.get());
   } else if (method == "nearest") {
-    interp_nearest_batch(f, lat.data(), lon.data(), n, data);
+    interp_nearest_batch(f, lat.data(), lon.data(), n, buf.get());
   } else {
-    delete[] data;
     throw std::invalid_argument("unknown method: " + method);
   }
-
+  float *data = buf.release();
+  nb::capsule owner(data,
+                    [](void *p) noexcept { delete[] static_cast<float *>(p); });
   size_t shape[1] = {n};
   return FloatOut(data, /*ndim=*/1, shape, owner);
 }
@@ -99,11 +97,12 @@ FloatOut resample(const ReducedGrid &grid, DoubleArray src_lats,
     throw std::invalid_argument("src_arr shape does not match (n_lat, n_lon)");
 
   const std::size_t n = grid.n_points();
-  float *data = new float[n];
+  std::unique_ptr<float[]> buf(new float[n]);
+  resample_from_latlon(grid, src_lats.data(), n_lat, src_lons.data(), n_lon,
+                       src_arr.data(), buf.get());
+  float *data = buf.release();
   nb::capsule owner(data,
                     [](void *p) noexcept { delete[] static_cast<float *>(p); });
-  resample_from_latlon(grid, src_lats.data(), n_lat, src_lons.data(), n_lon,
-                       src_arr.data(), data);
   size_t shape[1] = {n};
   return FloatOut(data, /*ndim=*/1, shape, owner);
 }

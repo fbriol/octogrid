@@ -2,6 +2,16 @@
 requires = ["scikit-build-core>=0.10", "nanobind>=2.2"]
 build-backend = "scikit_build_core.build"
 
+[project]
+name = "octogrid"
+version = "0.1.0.dev0"
+description = "Compact in-memory reduced grids with simple interpolation."
+readme = "README.md"
+license = { text = "BSD-3-Clause" }
+requires-python = ">=3.11"
+authors = [{ name = "octogrid contributors" }]
+dependencies = ["numpy>=1.24"]
+
 [tool.ruff]
 target-version = "py311"
 line-length = 79
@@ -48,7 +58,9 @@ select = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"**/tests/*.py" = ["PLR", "PT"]
+# Tests rely on pytest fixtures and short helper signatures; relax the
+# strictest annotation / pylint refactor rules there.
+"**/tests/*.py" = ["ANN", "D", "PLR", "PT", "PERF"]
 
 [tool.ruff.lint.isort]
 lines-after-imports = 2
@@ -60,3 +72,14 @@ docstring-code-format = true
 
 [tool.mypy]
 exclude = ["build", "examples", "docs"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+addopts = "--import-mode=importlib -ra --strict-markers"
+markers = [
+    "real_data: tests that need a non-distributable NetCDF file in the cwd",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7", "xarray", "zarr>=3"]

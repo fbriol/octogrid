@@ -2,3 +2,21 @@ build/**
 docs/doxygen/**
 docs/doxygen_warnings.log
 .cache/**
+
+# CPython / packaging
+__pycache__/
+*.pyc
+*.so
+*.egg-info/
+.eggs/
+dist/
+
+# Test / coverage artefacts
+.pytest_cache/
+.coverage
+.mypy_cache/
+.ruff_cache/
+
+# Local data we are not allowed to redistribute (CMEMS / CNES /
+# third-party NetCDF). Keep them locally for real-world tests only.
+*.nc
