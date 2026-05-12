@@ -1,11 +1,11 @@
-#include "rgrid/grid.hpp"
+#include "octogrid/grid.hpp"
 
 #include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <stdexcept>
 
-namespace rgrid {
+namespace octogrid {
 
 ReducedGrid::ReducedGrid(std::vector<double> latitudes_deg,
                          std::vector<std::uint32_t> n_lon)
@@ -101,4 +101,4 @@ ReducedGrid ReducedGrid::regular(std::size_t n_lat, std::uint32_t n_lon_each) {
   return ReducedGrid(std::move(lats), std::move(n_lon));
 }
 
-}  // namespace rgrid
+}  // namespace octogrid

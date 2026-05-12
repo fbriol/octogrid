@@ -4,7 +4,7 @@
 #include <memory>
 #include <vector>
 
-namespace rgrid {
+namespace octogrid {
 
 // Codec contract: a compression backend with O(1)-ish random access by linear
 // index. Backends MUST support point-decode (single value) and SHOULD
@@ -90,7 +90,7 @@ std::unique_ptr<Codec> make_uint16_row_tiled(const class ReducedGrid &grid);
 // Factory helper: bfloat16 codec (no tiling needed).
 std::unique_ptr<Codec> make_bfloat16();
 
-#ifdef RGRID_WITH_ZFP
+#ifdef OCTOGRID_WITH_ZFP
 // C3: ZFP fixed-rate, 1D blocks of 4 values. Random access by block.
 // `rate` = bits per value (e.g. 8 → ratio ×4, 4 → ratio ×8, 16 → ratio ×2).
 // Must be a positive integer; ZFP uses rate*4 bits per 4-value block.
@@ -114,4 +114,4 @@ std::unique_ptr<Codec> make_zfp_adaptive(
     double max_outlier_fraction_per_tile = 0.01);
 #endif
 
-}  // namespace rgrid
+}  // namespace octogrid

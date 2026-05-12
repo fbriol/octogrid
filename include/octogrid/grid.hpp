@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace rgrid {
+namespace octogrid {
 
 // Generalized reduced grid: latitudes (decreasing from north to south) +
 // number of equally-spaced longitude points per row. Covers classical
@@ -65,4 +65,4 @@ class ReducedGrid {
   std::size_t total_points_;
 };
 
-}  // namespace rgrid
+}  // namespace octogrid

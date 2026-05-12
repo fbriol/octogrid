@@ -9,7 +9,7 @@ import sys
 import time
 import numpy as np
 import xarray as xr
-import rgrid
+import octogrid
 
 
 def load_msla(path, var):
@@ -36,7 +36,7 @@ def measure_query_error(field, qlat, qlon, ref_arr, ref_lats, ref_lons):
                                   method="linear", bounds_error=False,
                                   fill_value=np.nan)
     truth = rgi(np.column_stack([qlat, qlon])).astype(np.float32)
-    pred = rgrid.interpolate(field, qlat, qlon, method="barycentric")
+    pred = octogrid.interpolate(field, qlat, qlon, method="barycentric")
     valid = np.isfinite(truth) & np.isfinite(pred)
     err = np.abs(pred[valid] - truth[valid])
     if err.size == 0:
@@ -54,7 +54,7 @@ def benchmark(label, path, var, epsilons=(None, 0.05)):
           f"NaN = {n_nan:,} ({100*n_nan/n_src:.1f} %)")
 
     # Build matching octahedral grid.
-    oct_grid = rgrid.octahedral_matching_latlon(lons)
+    oct_grid = octogrid.octahedral_matching_latlon(lons)
     # And the "trivial" regular grid for comparison (uses the source axes).
     if lons.min() < 0:
         # Shift to [0,360) for the lat/lon grid path
@@ -73,13 +73,15 @@ def benchmark(label, path, var, epsilons=(None, 0.05)):
     else:
         lats_dec = lats
         arr_dec = arr_pos
-    reg_grid = rgrid.ReducedGrid(latitudes_deg=lats_dec.tolist(),
-                                 n_lon=[lons_pos.size] * lats_dec.size)
+    reg_grid = octogrid.ReducedGrid(
+        latitudes_deg=lats_dec.tolist(),
+        n_lon=[lons_pos.size] * lats_dec.size,
+    )
     flat_reg = arr_dec.flatten()
 
     # Resample to octahedral.
     t0 = time.perf_counter()
-    flat_oct = rgrid.resample_from_latlon(oct_grid, lats, lons, arr)
+    flat_oct = octogrid.resample_from_latlon(oct_grid, lats, lons, arr)
     t_resample = time.perf_counter() - t0
     print(f"octahedral grid: n_lat={oct_grid.n_rows}, "
           f"n_points={oct_grid.n_points:,}  "
@@ -114,13 +116,15 @@ def benchmark(label, path, var, epsilons=(None, 0.05)):
                 codec = "zfp_adaptive"
                 kw = {"epsilon": eps, "max_outlier_frac": 0.01}
                 tag = f"zfp_adaptive ε={eps}"
-            f = rgrid.compress(grid, codec, flat, **kw)
+            f = octogrid.compress(grid, codec, flat, **kw)
             rmse, mx, _ = measure_query_error(
                 f, qlat, qlon, arr, lats, lons)
             # warmup + perf
-            rgrid.interpolate(f, qlat[:500], qlon[:500], method="barycentric")
+            octogrid.interpolate(
+                f, qlat[:500], qlon[:500], method="barycentric",
+            )
             t0 = time.perf_counter()
-            rgrid.interpolate(f, qlat, qlon, method="barycentric")
+            octogrid.interpolate(f, qlat, qlon, method="barycentric")
             dt = time.perf_counter() - t0
             label_full = f"{which:<11} {tag}"
             mb = f.footprint_bytes / 1e6

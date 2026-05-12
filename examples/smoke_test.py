@@ -7,7 +7,7 @@ accuracy. Mirrors tests/test_smoke.cpp on the Python side.
 
 import sys
 import numpy as np
-import rgrid
+import octogrid
 
 
 def analytic(lat_deg, lon_deg):
@@ -15,7 +15,7 @@ def analytic(lat_deg, lon_deg):
 
 
 def main() -> int:
-    grid = rgrid.ReducedGrid.octahedral(n_lat=128, base=20)
+    grid = octogrid.ReducedGrid.octahedral(n_lat=128, base=20)
     n = grid.n_points
     print(
         f'grid: {grid.n_rows} rows, {n} points, '
@@ -41,13 +41,13 @@ def main() -> int:
 
     failures = 0
     for codec_name, tol in [('bfloat16', 5e-3), ('uint16', 5e-3)]:
-        field = rgrid.compress(grid, codec_name, values)
+        field = octogrid.compress(grid, codec_name, values)
         ratio = (n * 4) / field.footprint_bytes
         kb = field.footprint_bytes / 1024
         print(f"\n[{codec_name}] {kb:.1f} KB (ratio = {ratio:.2f}x)")
 
         for method in ('nearest', 'barycentric'):
-            pred = rgrid.interpolate(field, qlat, qlon, method=method)
+            pred = octogrid.interpolate(field, qlat, qlon, method=method)
             err = np.abs(pred - truth)
             rmse = float(np.sqrt(np.mean(err**2)))
             print(f'  {method:11s}  rmse = {rmse:.4e}  max = {err.max():.4e}')

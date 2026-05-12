@@ -1,4 +1,4 @@
-"""rgrid — compact in-memory reduced grids with simple interpolation.
+"""octogrid — compact in-memory reduced grids with simple interpolation.
 
 The primary goal: store geophysical fields on a grid whose km-spacing is
 roughly constant (reduced/octahedral) instead of a regular lat/lon matrix
@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ._rgrid import CompressedField, ReducedGrid, compress, interpolate
+from ._octogrid import CompressedField, ReducedGrid, compress, interpolate
+from ._octogrid import resample_from_latlon as _resample_native
 
 
 if TYPE_CHECKING:
@@ -43,48 +44,28 @@ def resample_from_latlon(
 ) -> NDArray[np.float32]:
     """Bilinearly resample a regular lat/lon array onto a reduced grid.
 
-    NaN in the source (continents, masked points) propagate to the output
-    via the standard IEEE rules: any NaN among the 4 bracketing source
-    cells produces NaN at that target point.
+    Normalizes axis orientation (lats decreasing N→S, lons increasing in
+    ``[0, 360)``) before dispatching to the C++ bilinear core. NaN in the
+    source propagates to the output via the IEEE rules.
 
-    Returns a flat float32 array of length ``grid.n_points``, ready to be
-    passed to :func:`rgrid.compress`.
+    Returns a flat float32 array of length ``grid.n_points``, ready to
+    be passed to :func:`octogrid.compress`.
     """
-    from scipy.interpolate import RegularGridInterpolator  # noqa: PLC0415
+    lats = np.ascontiguousarray(np.asarray(src_lats, dtype=np.float64))
+    lons = np.ascontiguousarray(np.asarray(src_lons, dtype=np.float64))
+    arr = np.ascontiguousarray(np.asarray(src_arr, dtype=np.float32))
 
-    lats = np.asarray(src_lats, dtype=np.float64)
-    lons = np.asarray(src_lons, dtype=np.float64)
-    arr = np.asarray(src_arr, dtype=np.float32)
-
-    if lats[0] > lats[-1]:
-        lats = lats[::-1]
-        arr = arr[::-1, :]
+    if lats[0] < lats[-1]:
+        lats = np.ascontiguousarray(lats[::-1])
+        arr = np.ascontiguousarray(arr[::-1, :])
     if lons.min() < 0:
         shifted = (lons + 360.0) % 360.0
         order = np.argsort(shifted, kind="stable")
         keep = np.concatenate(([True], np.diff(shifted[order]) > 0))
         order = order[keep]
-        lons = shifted[order]
-        arr = arr[:, order]
-
-    lats_q = np.empty(grid.n_points, dtype=np.float64)
-    lons_q = np.empty(grid.n_points, dtype=np.float64)
-    off = 0
-    for r in range(grid.n_rows):
-        nl = grid.n_lon(r)
-        lats_q[off : off + nl] = grid.lat_deg(r)
-        lons_q[off : off + nl] = np.arange(nl) * (360.0 / nl)
-        off += nl
-
-    interp = RegularGridInterpolator(
-        (lats, lons),
-        arr,
-        method="linear",
-        bounds_error=False,
-        fill_value=np.nan,
-    )
-    pts = np.column_stack([lats_q, lons_q])
-    return interp(pts).astype(np.float32)
+        lons = np.ascontiguousarray(shifted[order])
+        arr = np.ascontiguousarray(arr[:, order])
+    return _resample_native(grid, lats, lons, arr)
 
 
 __all__ = [

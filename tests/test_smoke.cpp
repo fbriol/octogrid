@@ -1,4 +1,4 @@
-// Minimal smoke test for the rgrid core: build a small octahedral grid,
+// Minimal smoke test for the octogrid core: build a small octahedral grid,
 // encode a synthetic analytic field with each codec, interpolate on known
 // points, and check error stays within codec-specific tolerance.
 
@@ -7,10 +7,10 @@
 #include <cstdlib>
 #include <vector>
 
-#include "rgrid/codec.hpp"
-#include "rgrid/field.hpp"
-#include "rgrid/grid.hpp"
-#include "rgrid/interp.hpp"
+#include "octogrid/codec.hpp"
+#include "octogrid/field.hpp"
+#include "octogrid/grid.hpp"
+#include "octogrid/interp.hpp"
 
 namespace {
 
@@ -31,7 +31,7 @@ int check(bool cond, const char *msg) {
 }  // namespace
 
 int main() {
-  using namespace rgrid;
+  using namespace octogrid;
   int failures = 0;
 
   // 1. Build an octahedral grid with ~modest resolution.

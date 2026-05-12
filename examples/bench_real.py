@@ -11,7 +11,7 @@ import sys
 import time
 import numpy as np
 import xarray as xr
-import rgrid
+import octogrid
 
 
 def load_field(path, var, lat_name="latitude", lon_name="longitude",
@@ -50,8 +50,9 @@ def load_field(path, var, lat_name="latitude", lon_name="longitude",
 def build_grid_from_axes(lats, lons):
     nlat = lats.size
     nlon = lons.size
-    return rgrid.ReducedGrid(latitudes_deg=lats.tolist(),
-                             n_lon=[nlon] * nlat)
+    return octogrid.ReducedGrid(
+        latitudes_deg=lats.tolist(), n_lon=[nlon] * nlat,
+    )
 
 
 def run(name, path, var, **load_kw):
@@ -97,8 +98,8 @@ def run(name, path, var, **load_kw):
           f"{'max err':>11} {'pct ≤ε':>8} {'Mpts/s':>8}")
 
     # Reference: uint16 on the filled array (it doesn't handle NaN).
-    ref = rgrid.compress(grid, "uint16", flat_filled)
-    ref_pred = rgrid.interpolate(ref, qlat, qlon, method="barycentric")
+    ref = octogrid.compress(grid, "uint16", flat_filled)
+    ref_pred = octogrid.interpolate(ref, qlat, qlon, method="barycentric")
     print(f"{'uint16 (ref)':<18} {ref.footprint_bytes/1e6:>8.1f} "
           f"{(n_total*4)/ref.footprint_bytes:>7.2f}x {'-':>11} {'-':>11} "
           f"{'-':>8} {'-':>8}")
@@ -108,16 +109,16 @@ def run(name, path, var, **load_kw):
         # zfp_adaptive accepts NaN natively; others need the filled array.
         src = flat_raw if codec_name == "zfp_adaptive" else flat_filled
         try:
-            f = rgrid.compress(grid, codec_name, src, **kw)
+            f = octogrid.compress(grid, codec_name, src, **kw)
         except Exception as e:
             print(f"{label:<18} ERR: {e}")
             continue
         ratio = (n_total * 4) / f.footprint_bytes
 
         # warmup
-        rgrid.interpolate(f, qlat[:500], qlon[:500], method="barycentric")
+        octogrid.interpolate(f, qlat[:500], qlon[:500], method="barycentric")
         t0 = time.perf_counter()
-        pred = rgrid.interpolate(f, qlat, qlon, method="barycentric")
+        pred = octogrid.interpolate(f, qlat, qlon, method="barycentric")
         dt = time.perf_counter() - t0
         # Only compare on points where neither reference nor codec returned NaN.
         valid = np.isfinite(pred) & np.isfinite(ref_pred)

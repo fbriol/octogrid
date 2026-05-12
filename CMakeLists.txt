@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(rgrid CXX)
+project(octogrid CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -12,17 +12,17 @@ endif()
 
 add_compile_options(-Wall -Wextra -Wpedantic)
 
-add_library(rgrid STATIC src/grid.cpp src/codecs.cpp src/field.cpp
-                         src/interp.cpp)
-target_include_directories(rgrid PUBLIC include)
+add_library(octogrid STATIC src/grid.cpp src/codecs.cpp src/field.cpp
+                            src/interp.cpp src/resample.cpp)
+target_include_directories(octogrid PUBLIC include)
 
-option(RGRID_BUILD_PYTHON "Build Python bindings" ON)
-option(RGRID_BUILD_TESTS "Build C++ tests" ON)
-option(RGRID_WITH_ZFP "Enable ZFP fixed-rate codec (C3)" ON)
+option(OCTOGRID_BUILD_PYTHON "Build Python bindings" ON)
+option(OCTOGRID_BUILD_TESTS "Build C++ tests" ON)
+option(OCTOGRID_WITH_ZFP "Enable ZFP fixed-rate codec (C3)" ON)
 
 include(FetchContent)
 
-if(RGRID_WITH_ZFP)
+if(OCTOGRID_WITH_ZFP)
   set(BUILD_UTILITIES
       OFF
       CACHE BOOL "" FORCE)
@@ -41,18 +41,18 @@ if(RGRID_WITH_ZFP)
     GIT_TAG 1.0.1
     GIT_SHALLOW TRUE)
   FetchContent_MakeAvailable(zfp)
-  target_link_libraries(rgrid PUBLIC zfp::zfp)
-  target_compile_definitions(rgrid PUBLIC RGRID_WITH_ZFP=1)
+  target_link_libraries(octogrid PUBLIC zfp::zfp)
+  target_compile_definitions(octogrid PUBLIC OCTOGRID_WITH_ZFP=1)
 endif()
 
-if(RGRID_BUILD_TESTS)
+if(OCTOGRID_BUILD_TESTS)
   enable_testing()
   add_executable(test_smoke tests/test_smoke.cpp)
-  target_link_libraries(test_smoke PRIVATE rgrid)
+  target_link_libraries(test_smoke PRIVATE octogrid)
   add_test(NAME test_smoke COMMAND test_smoke)
 endif()
 
-if(RGRID_BUILD_PYTHON)
+if(OCTOGRID_BUILD_PYTHON)
   find_package(
     Python 3.11
     COMPONENTS Interpreter Development.Module
@@ -76,11 +76,12 @@ if(RGRID_BUILD_PYTHON)
     FetchContent_MakeAvailable(nanobind)
   endif()
 
-  nanobind_add_module(_rgrid python/bindings.cpp)
-  target_link_libraries(_rgrid PRIVATE rgrid)
-  set_target_properties(_rgrid PROPERTIES LIBRARY_OUTPUT_DIRECTORY
-                                          ${CMAKE_BINARY_DIR}/python_pkg/rgrid)
+  nanobind_add_module(_octogrid python/bindings.cpp)
+  target_link_libraries(_octogrid PRIVATE octogrid)
+  set_target_properties(
+    _octogrid PROPERTIES LIBRARY_OUTPUT_DIRECTORY
+                         ${CMAKE_BINARY_DIR}/python_pkg/octogrid)
   # Copy Python facade
-  configure_file(${CMAKE_SOURCE_DIR}/python/rgrid/__init__.py
-                 ${CMAKE_BINARY_DIR}/python_pkg/rgrid/__init__.py COPYONLY)
+  configure_file(${CMAKE_SOURCE_DIR}/python/octogrid/__init__.py
+                 ${CMAKE_BINARY_DIR}/python_pkg/octogrid/__init__.py COPYONLY)
 endif()

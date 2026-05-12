@@ -3,7 +3,7 @@
 
 #include "field.hpp"
 
-namespace rgrid {
+namespace octogrid {
 
 // Nearest neighbour (B1): iso-latitude row search + 1D longitude search.
 // No global kd-tree. O(log n_rows + log n_lon).
@@ -28,4 +28,4 @@ void interp_barycentric_batch(const CompressedField &f, const double *lat_deg,
 void interp_nearest_batch(const CompressedField &f, const double *lat_deg,
                           const double *lon_deg, std::size_t n, float *out);
 
-}  // namespace rgrid
+}  // namespace octogrid

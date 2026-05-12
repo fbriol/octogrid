@@ -1,6 +1,6 @@
-#include "rgrid/field.hpp"
+#include "octogrid/field.hpp"
 
-namespace rgrid {
+namespace octogrid {
 
 CompressedField::CompressedField(const ReducedGrid &grid,
                                  std::unique_ptr<Codec> codec,
@@ -9,4 +9,4 @@ CompressedField::CompressedField(const ReducedGrid &grid,
   codec_->encode(values, grid_.n_points());
 }
 
-}  // namespace rgrid
+}  // namespace octogrid

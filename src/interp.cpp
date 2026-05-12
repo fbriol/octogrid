@@ -1,9 +1,9 @@
-#include "rgrid/interp.hpp"
+#include "octogrid/interp.hpp"
 
 #include <cmath>
 #include <limits>
 
-namespace rgrid {
+namespace octogrid {
 
 namespace {
 
@@ -159,4 +159,4 @@ void interp_nearest_batch(const CompressedField &f, const double *lat,
     out[i] = interp_nearest(f, lat[i], lon[i]);
 }
 
-}  // namespace rgrid
+}  // namespace octogrid

@@ -4,7 +4,7 @@
 #include "codec.hpp"
 #include "grid.hpp"
 
-namespace rgrid {
+namespace octogrid {
 
 // A compressed scalar field on a ReducedGrid.
 // Owns the codec (and its buffers). Holds a non-owning ref to the grid —
@@ -28,4 +28,4 @@ class CompressedField {
   std::unique_ptr<Codec> codec_;
 };
 
-}  // namespace rgrid
+}  // namespace octogrid

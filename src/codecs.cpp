@@ -3,14 +3,14 @@
 #include <cstring>
 #include <stdexcept>
 
-#include "rgrid/codec.hpp"
-#include "rgrid/grid.hpp"
+#include "octogrid/codec.hpp"
+#include "octogrid/grid.hpp"
 
-#ifdef RGRID_WITH_ZFP
+#ifdef OCTOGRID_WITH_ZFP
 #include <zfp.h>
 #endif
 
-namespace rgrid {
+namespace octogrid {
 
 // ---- Bfloat16 -------------------------------------------------------------
 
@@ -102,7 +102,7 @@ std::unique_ptr<Codec> make_bfloat16() {
   return std::make_unique<Bfloat16Codec>();
 }
 
-#ifdef RGRID_WITH_ZFP
+#ifdef OCTOGRID_WITH_ZFP
 
 // ZFP fixed-rate, 1D. Each 4-value block uses exactly rate*4 bits, so we can
 // seek to any block in O(1) via the bitstream and decode it independently.
@@ -564,7 +564,7 @@ std::unique_ptr<Codec> make_zfp_adaptive(const ReducedGrid &grid,
                                             max_outlier_fraction_per_tile);
 }
 
-#endif  // RGRID_WITH_ZFP
+#endif  // OCTOGRID_WITH_ZFP
 
 std::unique_ptr<Codec> make_uint16_row_tiled(const ReducedGrid &grid) {
   std::vector<std::size_t> offsets(grid.n_rows() + 1);
@@ -574,4 +574,4 @@ std::unique_ptr<Codec> make_uint16_row_tiled(const ReducedGrid &grid) {
   return std::make_unique<Uint16Codec>(std::move(offsets));
 }
 
-}  // namespace rgrid
+}  // namespace octogrid

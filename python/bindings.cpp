@@ -8,13 +8,14 @@
 #include <memory>
 #include <stdexcept>
 
-#include "rgrid/codec.hpp"
-#include "rgrid/field.hpp"
-#include "rgrid/grid.hpp"
-#include "rgrid/interp.hpp"
+#include "octogrid/codec.hpp"
+#include "octogrid/field.hpp"
+#include "octogrid/grid.hpp"
+#include "octogrid/interp.hpp"
+#include "octogrid/resample.hpp"
 
 namespace nb = nanobind;
-using namespace rgrid;
+using namespace octogrid;
 
 // Aliases for 1D float32 / float64 contiguous CPU arrays.
 using FloatArray =
@@ -39,13 +40,13 @@ CompressedField make_field(const ReducedGrid &grid,
   } else if (codec_name == "uint16") {
     codec = make_uint16_row_tiled(grid);
   } else if (codec_name == "zfp") {
-#ifdef RGRID_WITH_ZFP
+#ifdef OCTOGRID_WITH_ZFP
     codec = make_zfp_fixed_rate(zfp_rate);
 #else
     throw std::runtime_error("zfp codec not compiled in");
 #endif
   } else if (codec_name == "zfp_adaptive") {
-#ifdef RGRID_WITH_ZFP
+#ifdef OCTOGRID_WITH_ZFP
     codec = make_zfp_adaptive(grid, epsilon, max_outlier_frac);
 #else
     throw std::runtime_error("zfp codec not compiled in");
@@ -81,10 +82,34 @@ FloatOut batch_interp(const CompressedField &f, DoubleArray lat,
   return FloatOut(data, /*ndim=*/1, shape, owner);
 }
 
+// Bilinear resampling from a regular lat/lon source onto a ReducedGrid.
+// The Python facade is responsible for delivering axes in the canonical
+// orientation (lats decreasing, lons increasing in [0, 360)) and a
+// C-contiguous (n_lat, n_lon) float32 source array.
+using Float2D =
+    nb::ndarray<const float, nb::ndim<2>, nb::c_contig, nb::device::cpu>;
+
+FloatOut resample(const ReducedGrid &grid, DoubleArray src_lats,
+                  DoubleArray src_lons, Float2D src_arr) {
+  const std::size_t n_lat = src_lats.size();
+  const std::size_t n_lon = src_lons.size();
+  if (src_arr.shape(0) != n_lat || src_arr.shape(1) != n_lon)
+    throw std::invalid_argument("src_arr shape does not match (n_lat, n_lon)");
+
+  const std::size_t n = grid.n_points();
+  float *data = new float[n];
+  nb::capsule owner(data,
+                    [](void *p) noexcept { delete[] static_cast<float *>(p); });
+  resample_from_latlon(grid, src_lats.data(), n_lat, src_lons.data(), n_lon,
+                       src_arr.data(), data);
+  size_t shape[1] = {n};
+  return FloatOut(data, /*ndim=*/1, shape, owner);
+}
+
 }  // namespace
 
-NB_MODULE(_rgrid, m) {
-  m.doc() = "rgrid — compact in-memory reduced grids and interpolation";
+NB_MODULE(_octogrid, m) {
+  m.doc() = "octogrid — compact in-memory reduced grids and interpolation";
 
   nb::class_<ReducedGrid>(m, "ReducedGrid")
       .def(nb::init<std::vector<double>, std::vector<std::uint32_t>>(),
@@ -118,4 +143,10 @@ NB_MODULE(_rgrid, m) {
         nb::arg("lon_deg"), nb::arg("method") = "barycentric",
         "Interpolate field at query points. "
         "method ∈ {'barycentric','nearest'}.");
+
+  m.def("resample_from_latlon", &resample, nb::arg("grid"), nb::arg("src_lats"),
+        nb::arg("src_lons"), nb::arg("src_arr"),
+        "Bilinearly resample a regular lat/lon source onto a ReducedGrid. "
+        "src_lats must be strictly decreasing; src_lons strictly increasing "
+        "in [0, 360); src_arr shape (n_lat, n_lon). NaN propagates.");
 }
