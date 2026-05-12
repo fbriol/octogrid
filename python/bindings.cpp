@@ -35,7 +35,9 @@ CompressedField make_field(const ReducedGrid &grid,
   if (values.size() != grid.n_points())
     throw std::invalid_argument("values length != grid.n_points()");
   std::unique_ptr<Codec> codec;
-  if (codec_name == "bfloat16") {
+  if (codec_name == "raw") {
+    codec = make_raw();
+  } else if (codec_name == "bfloat16") {
     codec = make_bfloat16();
   } else if (codec_name == "uint16") {
     codec = make_uint16_row_tiled(grid);
@@ -127,6 +129,12 @@ NB_MODULE(_octogrid, m) {
       .def_prop_ro("footprint_bytes", &CompressedField::footprint_bytes)
       .def_prop_ro("codec_name",
                    [](const CompressedField &f) { return f.codec().name(); })
+      .def_prop_ro(
+          "grid",
+          [](const CompressedField &f) -> const ReducedGrid & {
+            return f.grid();
+          },
+          nb::rv_policy::reference_internal)
       .def_prop_ro("n_points", [](const CompressedField &f) {
         return f.grid().n_points();
       });
@@ -149,4 +157,36 @@ NB_MODULE(_octogrid, m) {
         "Bilinearly resample a regular lat/lon source onto a ReducedGrid. "
         "src_lats must be strictly decreasing; src_lons strictly increasing "
         "in [0, 360); src_arr shape (n_lat, n_lon). NaN propagates.");
+
+  // ---- Serialization --------------------------------------------------
+
+  m.def(
+      "_serialize_codec",
+      [](const CompressedField &f) {
+        const auto blob = f.codec().serialize();
+        // Copy out via capsule-owned uint8 ndarray.
+        auto *data = new std::uint8_t[blob.size()];
+        std::memcpy(data, blob.data(), blob.size());
+        nb::capsule owner(data, [](void *p) noexcept {
+          delete[] static_cast<std::uint8_t *>(p);
+        });
+        size_t shape[1] = {blob.size()};
+        return nb::ndarray<std::uint8_t, nb::numpy, nb::ndim<1>>(
+            data, /*ndim=*/1, shape, owner);
+      },
+      nb::arg("field"),
+      "Return the codec's serialized state as a numpy uint8 array.");
+
+  m.def(
+      "_field_from_blob",
+      [](const ReducedGrid &grid, const std::string &codec_name,
+         nb::ndarray<const std::uint8_t, nb::ndim<1>, nb::c_contig,
+                     nb::device::cpu>
+             blob) {
+        auto codec =
+            deserialize_codec(grid, codec_name, blob.data(), blob.size());
+        return CompressedField(grid, std::move(codec));
+      },
+      nb::arg("grid"), nb::arg("codec_name"), nb::arg("blob"),
+      "Rebuild a CompressedField from a grid + codec name + serialized blob.");
 }

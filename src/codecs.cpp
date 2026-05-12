@@ -12,6 +12,32 @@
 
 namespace octogrid {
 
+// ---- Raw float32 ----------------------------------------------------------
+
+void RawFloat32Codec::encode(const float *values, std::size_t n) {
+  data_.assign(values, values + n);
+}
+
+std::vector<std::uint8_t> RawFloat32Codec::serialize() const {
+  std::vector<std::uint8_t> out(data_.size() * sizeof(float));
+  std::memcpy(out.data(), data_.data(), out.size());
+  return out;
+}
+
+std::unique_ptr<RawFloat32Codec> RawFloat32Codec::deserialize(
+    const std::uint8_t *data, std::size_t size) {
+  if (size % sizeof(float) != 0)
+    throw std::invalid_argument("raw codec: blob size not a multiple of 4");
+  auto codec = std::make_unique<RawFloat32Codec>();
+  codec->data_.resize(size / sizeof(float));
+  std::memcpy(codec->data_.data(), data, size);
+  return codec;
+}
+
+std::unique_ptr<Codec> make_raw() {
+  return std::make_unique<RawFloat32Codec>();
+}
+
 // ---- Bfloat16 -------------------------------------------------------------
 
 static inline std::uint16_t f32_to_bf16(float v) {
@@ -36,6 +62,22 @@ void Bfloat16Codec::encode(const float *values, std::size_t n) {
 
 float Bfloat16Codec::decode_one(std::size_t idx) const {
   return bf16_to_f32(data_[idx]);
+}
+
+std::vector<std::uint8_t> Bfloat16Codec::serialize() const {
+  std::vector<std::uint8_t> out(data_.size() * sizeof(std::uint16_t));
+  std::memcpy(out.data(), data_.data(), out.size());
+  return out;
+}
+
+std::unique_ptr<Bfloat16Codec> Bfloat16Codec::deserialize(
+    const std::uint8_t *data, std::size_t size) {
+  if (size % sizeof(std::uint16_t) != 0)
+    throw std::invalid_argument("bfloat16 codec: bad blob size");
+  auto codec = std::make_unique<Bfloat16Codec>();
+  codec->data_.resize(size / sizeof(std::uint16_t));
+  std::memcpy(codec->data_.data(), data, size);
+  return codec;
 }
 
 // ---- Uint16 per-tile ------------------------------------------------------
@@ -94,6 +136,62 @@ std::size_t Uint16Codec::footprint_bytes() const {
   return data_.size() * sizeof(std::uint16_t) +
          tile_min_.size() * sizeof(float) + tile_scale_.size() * sizeof(float) +
          tile_offsets_.size() * sizeof(std::size_t);
+}
+
+// Serialized layout for Uint16Codec (versioned implicitly by codec name +
+// outer attribute "format_version"):
+//   [n_tiles : uint64]
+//   [tile_min   : float32 × n_tiles]
+//   [tile_scale : float32 × n_tiles]
+//   [data       : uint16  × n_total]   (n_total = tile_offsets_.back())
+// Tile boundaries are reconstructed from the grid on load.
+std::vector<std::uint8_t> Uint16Codec::serialize() const {
+  const std::size_t n_tiles = tile_min_.size();
+  const std::size_t header = sizeof(std::uint64_t);
+  const std::size_t mins = n_tiles * sizeof(float);
+  const std::size_t scales = n_tiles * sizeof(float);
+  const std::size_t data = data_.size() * sizeof(std::uint16_t);
+  std::vector<std::uint8_t> out(header + mins + scales + data);
+  std::uint8_t *p = out.data();
+  const std::uint64_t n_tiles_u = n_tiles;
+  std::memcpy(p, &n_tiles_u, header);
+  p += header;
+  std::memcpy(p, tile_min_.data(), mins);
+  p += mins;
+  std::memcpy(p, tile_scale_.data(), scales);
+  p += scales;
+  std::memcpy(p, data_.data(), data);
+  return out;
+}
+
+std::unique_ptr<Uint16Codec> Uint16Codec::deserialize(
+    std::vector<std::size_t> tile_offsets, const std::uint8_t *data,
+    std::size_t size) {
+  auto codec = std::make_unique<Uint16Codec>(std::move(tile_offsets));
+  const std::size_t n_tiles = codec->tile_offsets_.size() - 1;
+  const std::size_t header = sizeof(std::uint64_t);
+  if (size < header)
+    throw std::invalid_argument("uint16 codec: blob too small");
+  std::uint64_t n_tiles_stored;
+  std::memcpy(&n_tiles_stored, data, header);
+  if (n_tiles_stored != n_tiles)
+    throw std::invalid_argument("uint16 codec: tile count mismatch with grid");
+  const std::size_t mins = n_tiles * sizeof(float);
+  const std::size_t scales = n_tiles * sizeof(float);
+  const std::size_t n_total = codec->tile_offsets_.back();
+  const std::size_t data_bytes = n_total * sizeof(std::uint16_t);
+  if (size != header + mins + scales + data_bytes)
+    throw std::invalid_argument("uint16 codec: blob size mismatch");
+  codec->tile_min_.resize(n_tiles);
+  codec->tile_scale_.resize(n_tiles);
+  codec->data_.resize(n_total);
+  const std::uint8_t *p = data + header;
+  std::memcpy(codec->tile_min_.data(), p, mins);
+  p += mins;
+  std::memcpy(codec->tile_scale_.data(), p, scales);
+  p += scales;
+  std::memcpy(codec->data_.data(), p, data_bytes);
+  return codec;
 }
 
 // ---- Factories ------------------------------------------------------------
@@ -188,6 +286,48 @@ class ZfpCodec : public Codec {
     return buffer_.size() + sizeof(*this);
   }
   const char *name() const override { return "zfp-fixed-rate"; }
+
+  std::vector<std::uint8_t> serialize() const override {
+    // Layout: [u32 rate][u64 n][u64 n_padded][u64 bits_per_block]
+    //         [u64 buf_size][u8 × buf_size]
+    const std::size_t header =
+        sizeof(std::uint32_t) + 4 * sizeof(std::uint64_t);
+    std::vector<std::uint8_t> out(header + buffer_.size());
+    std::uint8_t *p = out.data();
+    const std::uint32_t rate_u = rate_;
+    std::memcpy(p, &rate_u, sizeof(rate_u));
+    p += sizeof(rate_u);
+    const std::uint64_t fields[4] = {n_, n_padded_, bits_per_block_,
+                                     buffer_.size()};
+    std::memcpy(p, fields, sizeof(fields));
+    p += sizeof(fields);
+    std::memcpy(p, buffer_.data(), buffer_.size());
+    return out;
+  }
+
+  static std::unique_ptr<ZfpCodec> deserialize(const std::uint8_t *data,
+                                               std::size_t size) {
+    const std::size_t header =
+        sizeof(std::uint32_t) + 4 * sizeof(std::uint64_t);
+    if (size < header) throw std::invalid_argument("zfp codec: blob too small");
+    std::uint32_t rate_u;
+    std::memcpy(&rate_u, data, sizeof(rate_u));
+    std::uint64_t fields[4];
+    std::memcpy(fields, data + sizeof(rate_u), sizeof(fields));
+    if (size != header + fields[3])
+      throw std::invalid_argument("zfp codec: blob size mismatch");
+    auto codec = std::make_unique<ZfpCodec>(rate_u);
+    codec->n_ = fields[0];
+    codec->n_padded_ = fields[1];
+    codec->bits_per_block_ = fields[2];
+    codec->buffer_.assign(data + header, data + header + fields[3]);
+    codec->zfp_ = zfp_stream_open(nullptr);
+    zfp_stream_set_rate(codec->zfp_, static_cast<double>(codec->rate_),
+                        zfp_type_float, 1, zfp_false);
+    codec->stream_ = stream_open(codec->buffer_.data(), codec->buffer_.size());
+    zfp_stream_set_bit_stream(codec->zfp_, codec->stream_);
+    return codec;
+  }
 
  private:
   unsigned rate_;
@@ -523,6 +663,15 @@ class AdaptiveZfpCodec : public Codec {
     return has_nan_ ? "zfp-adaptive+mask" : "zfp-adaptive";
   }
 
+  // Serialized layout (see header comments above for semantics). Lengths of
+  // arrays whose size is determined by the grid (n_tiles, tile_offsets_)
+  // are reconstructed at deserialize time; only sizes specific to this
+  // instance (buffer, outliers, runs) are stored.
+  std::vector<std::uint8_t> serialize() const override;
+  static std::unique_ptr<AdaptiveZfpCodec> deserialize(
+      const class ReducedGrid &grid, const std::uint8_t *data,
+      std::size_t size);
+
  private:
   std::vector<std::size_t> tile_offsets_;  // ORIGINAL grid offsets (per row)
   double epsilon_;
@@ -564,6 +713,114 @@ std::unique_ptr<Codec> make_zfp_adaptive(const ReducedGrid &grid,
                                             max_outlier_fraction_per_tile);
 }
 
+// ---- AdaptiveZfp serialize / deserialize ---------------------------------
+
+namespace {
+template <typename T>
+void append_pod(std::vector<std::uint8_t> &out, const T &v) {
+  const std::size_t s = sizeof(T);
+  const std::size_t off = out.size();
+  out.resize(off + s);
+  std::memcpy(out.data() + off, &v, s);
+}
+template <typename T>
+void append_array(std::vector<std::uint8_t> &out, const std::vector<T> &v) {
+  const std::size_t s = v.size() * sizeof(T);
+  const std::size_t off = out.size();
+  out.resize(off + s);
+  if (s) std::memcpy(out.data() + off, v.data(), s);
+}
+template <typename T>
+const std::uint8_t *read_array(const std::uint8_t *p, std::vector<T> &out,
+                               std::size_t n) {
+  out.resize(n);
+  if (n) std::memcpy(out.data(), p, n * sizeof(T));
+  return p + n * sizeof(T);
+}
+template <typename T>
+const std::uint8_t *read_pod(const std::uint8_t *p, T &out) {
+  std::memcpy(&out, p, sizeof(T));
+  return p + sizeof(T);
+}
+}  // namespace
+
+std::vector<std::uint8_t> AdaptiveZfpCodec::serialize() const {
+  const std::size_t n_tiles = tile_rate_.size();
+  std::vector<std::uint8_t> out;
+  out.reserve(buffer_.size() + 256);
+  // Header: version, has_nan, n_tiles, n_outliers, buffer_size
+  append_pod<std::uint8_t>(out, /*version=*/1);
+  append_pod<std::uint8_t>(out, has_nan_ ? 1 : 0);
+  append_pod<std::uint64_t>(out, n_tiles);
+  append_pod<std::uint64_t>(out, outlier_idx_.size());
+  append_pod<std::uint64_t>(out, buffer_.size());
+  append_array(out, tile_rate_);
+  append_array(out, tile_byte_offset_);  // n_tiles + 1
+  append_array(out, tile_bits_per_block_);
+  append_array(out, buffer_);
+  append_array(out, outlier_idx_);
+  append_array(out, outlier_val_);
+  if (has_nan_) {
+    append_pod<std::uint64_t>(out, row_runs_.size());
+    append_array(out, row_state0_);
+    append_array(out, row_runs_);
+    append_array(out, row_runs_offset_);
+    append_array(out, row_finite_offset_);
+    append_array(out, tile_finite_offset_);
+  }
+  return out;
+}
+
+std::unique_ptr<AdaptiveZfpCodec> AdaptiveZfpCodec::deserialize(
+    const ReducedGrid &grid, const std::uint8_t *data, std::size_t size) {
+  // Reconstruct tile_offsets from grid (matches the make_zfp_adaptive path).
+  std::vector<std::size_t> offsets(grid.n_rows() + 1);
+  offsets[0] = 0;
+  for (std::size_t r = 0; r < grid.n_rows(); ++r)
+    offsets[r + 1] = offsets[r] + grid.n_lon(r);
+
+  auto codec = std::make_unique<AdaptiveZfpCodec>(std::move(offsets),
+                                                  /*epsilon=*/0.0,
+                                                  /*max_outlier_frac=*/0.0);
+  const std::uint8_t *p = data;
+  const std::uint8_t *end = data + size;
+  std::uint8_t version, has_nan_u;
+  p = read_pod(p, version);
+  if (version != 1)
+    throw std::invalid_argument("zfp-adaptive: unsupported version");
+  p = read_pod(p, has_nan_u);
+  codec->has_nan_ = has_nan_u != 0;
+  std::uint64_t n_tiles, n_outliers, buf_size;
+  p = read_pod(p, n_tiles);
+  p = read_pod(p, n_outliers);
+  p = read_pod(p, buf_size);
+  if (n_tiles != grid.n_rows())
+    throw std::invalid_argument("zfp-adaptive: tile count != grid rows");
+
+  p = read_array(p, codec->tile_rate_, n_tiles);
+  p = read_array(p, codec->tile_byte_offset_, n_tiles + 1);
+  p = read_array(p, codec->tile_bits_per_block_, n_tiles);
+  p = read_array(p, codec->buffer_, buf_size);
+  p = read_array(p, codec->outlier_idx_, n_outliers);
+  p = read_array(p, codec->outlier_val_, n_outliers);
+  if (codec->has_nan_) {
+    std::uint64_t n_runs;
+    p = read_pod(p, n_runs);
+    p = read_array(p, codec->row_state0_, n_tiles);
+    p = read_array(p, codec->row_runs_, n_runs);
+    p = read_array(p, codec->row_runs_offset_, n_tiles + 1);
+    p = read_array(p, codec->row_finite_offset_, n_tiles + 1);
+    p = read_array(p, codec->tile_finite_offset_, n_tiles + 1);
+  }
+  if (p != end)
+    throw std::invalid_argument("zfp-adaptive: trailing bytes after blob");
+
+  codec->zfp_ = zfp_stream_open(nullptr);
+  codec->stream_ = stream_open(codec->buffer_.data(), codec->buffer_.size());
+  zfp_stream_set_bit_stream(codec->zfp_, codec->stream_);
+  return codec;
+}
+
 #endif  // OCTOGRID_WITH_ZFP
 
 std::unique_ptr<Codec> make_uint16_row_tiled(const ReducedGrid &grid) {
@@ -572,6 +829,27 @@ std::unique_ptr<Codec> make_uint16_row_tiled(const ReducedGrid &grid) {
   for (std::size_t r = 0; r < grid.n_rows(); ++r)
     offsets[r + 1] = offsets[r] + grid.n_lon(r);
   return std::make_unique<Uint16Codec>(std::move(offsets));
+}
+
+std::unique_ptr<Codec> deserialize_codec(const ReducedGrid &grid,
+                                         const std::string &name,
+                                         const std::uint8_t *data,
+                                         std::size_t size) {
+  if (name == "raw") return RawFloat32Codec::deserialize(data, size);
+  if (name == "bfloat16") return Bfloat16Codec::deserialize(data, size);
+  if (name == "uint16-tiled") {
+    std::vector<std::size_t> offsets(grid.n_rows() + 1);
+    offsets[0] = 0;
+    for (std::size_t r = 0; r < grid.n_rows(); ++r)
+      offsets[r + 1] = offsets[r] + grid.n_lon(r);
+    return Uint16Codec::deserialize(std::move(offsets), data, size);
+  }
+#ifdef OCTOGRID_WITH_ZFP
+  if (name == "zfp-fixed-rate") return ZfpCodec::deserialize(data, size);
+  if (name == "zfp-adaptive" || name == "zfp-adaptive+mask")
+    return AdaptiveZfpCodec::deserialize(grid, data, size);
+#endif
+  throw std::invalid_argument("unknown codec name: " + name);
 }
 
 }  // namespace octogrid

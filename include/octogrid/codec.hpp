@@ -40,9 +40,40 @@ class Codec {
 
   // Codec name (for debugging / logging).
   virtual const char *name() const = 0;
+
+  // Serialize the codec's internal state to a contiguous byte buffer.
+  // Layout is codec-specific and not stable across major versions; pair
+  // each serialized blob with the codec name and a format version stored
+  // by the caller.
+  virtual std::vector<std::uint8_t> serialize() const = 0;
 };
 
+// Reconstruct a codec from a name + a previously-serialized blob.
+// `grid` is needed by codecs whose state depends on row offsets.
+std::unique_ptr<Codec> deserialize_codec(const class ReducedGrid &grid,
+                                         const std::string &name,
+                                         const std::uint8_t *data,
+                                         std::size_t size);
+
 // ---- Concrete codecs ------------------------------------------------------
+
+// C0: Raw float32. No compression — used as the default "topology only" mode
+// where the win comes from the reduced grid alone. Decode is a single load.
+class RawFloat32Codec : public Codec {
+ public:
+  void encode(const float *values, std::size_t n) override;
+  float decode_one(std::size_t idx) const override { return data_[idx]; }
+  std::size_t footprint_bytes() const override {
+    return data_.size() * sizeof(float);
+  }
+  const char *name() const override { return "raw"; }
+  std::vector<std::uint8_t> serialize() const override;
+  static std::unique_ptr<RawFloat32Codec> deserialize(const std::uint8_t *data,
+                                                      std::size_t size);
+
+ private:
+  std::vector<float> data_;
+};
 
 // C1: bfloat16. Plain uint16 storage of the high 16 bits of float32. Ratio
 // fixed at ×2, decode = 1 shift. The "performance maximum" baseline.
@@ -52,6 +83,9 @@ class Bfloat16Codec : public Codec {
   float decode_one(std::size_t idx) const override;
   std::size_t footprint_bytes() const override { return data_.size() * 2; }
   const char *name() const override { return "bfloat16"; }
+  std::vector<std::uint8_t> serialize() const override;
+  static std::unique_ptr<Bfloat16Codec> deserialize(const std::uint8_t *data,
+                                                    std::size_t size);
 
  private:
   std::vector<std::uint16_t> data_;
@@ -72,16 +106,16 @@ class Uint16Codec : public Codec {
   float decode_one(std::size_t idx) const override;
   std::size_t footprint_bytes() const override;
   const char *name() const override { return "uint16-tiled"; }
+  std::vector<std::uint8_t> serialize() const override;
+  static std::unique_ptr<Uint16Codec> deserialize(
+      std::vector<std::size_t> tile_offsets, const std::uint8_t *data,
+      std::size_t size);
 
  private:
   std::vector<std::size_t> tile_offsets_;  // size n_tiles + 1
   std::vector<float> tile_min_;
   std::vector<float> tile_scale_;  // (max - min) / 65535, or 0
   std::vector<std::uint16_t> data_;
-  // Per-index → tile lookup. Built once. O(n) bytes overhead but constant
-  // factor smaller than data itself (one uint32 vs one uint16 stored).
-  // We instead use upper_bound on tile_offsets_ for O(log n_tiles) decode,
-  // which is preferable since n_tiles ~ sqrt(n_points) typically.
 };
 
 // Factory helper: uint16 codec with one tile per grid row.
@@ -89,6 +123,9 @@ std::unique_ptr<Codec> make_uint16_row_tiled(const class ReducedGrid &grid);
 
 // Factory helper: bfloat16 codec (no tiling needed).
 std::unique_ptr<Codec> make_bfloat16();
+
+// Factory helper: raw float32 codec (no compression).
+std::unique_ptr<Codec> make_raw();
 
 #ifdef OCTOGRID_WITH_ZFP
 // C3: ZFP fixed-rate, 1D blocks of 4 values. Random access by block.

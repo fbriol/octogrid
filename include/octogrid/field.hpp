@@ -7,12 +7,16 @@
 namespace octogrid {
 
 // A compressed scalar field on a ReducedGrid.
-// Owns the codec (and its buffers). Holds a non-owning ref to the grid —
-// grids are cheap and typically shared across many fields.
+// Stores its grid by value so that ownership semantics are clean across the
+// C++/Python boundary; grids are cheap (two vectors sized to n_rows).
 class CompressedField {
  public:
-  CompressedField(const ReducedGrid &grid, std::unique_ptr<Codec> codec,
+  // Build from raw float32 values: calls codec->encode(values, ...).
+  CompressedField(ReducedGrid grid, std::unique_ptr<Codec> codec,
                   const float *values);
+
+  // Build from an already-encoded codec (e.g. after deserialize).
+  CompressedField(ReducedGrid grid, std::unique_ptr<Codec> codec);
 
   const ReducedGrid &grid() const { return grid_; }
   const Codec &codec() const { return *codec_; }
@@ -24,7 +28,7 @@ class CompressedField {
   std::size_t footprint_bytes() const { return codec_->footprint_bytes(); }
 
  private:
-  const ReducedGrid &grid_;
+  ReducedGrid grid_;
   std::unique_ptr<Codec> codec_;
 };
 
