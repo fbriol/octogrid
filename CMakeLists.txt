@@ -81,7 +81,11 @@ if(OCTOGRID_BUILD_PYTHON)
   set_target_properties(
     _octogrid PROPERTIES LIBRARY_OUTPUT_DIRECTORY
                          ${CMAKE_BINARY_DIR}/python_pkg/octogrid)
-  # Copy Python facade
-  configure_file(${CMAKE_SOURCE_DIR}/python/octogrid/__init__.py
-                 ${CMAKE_BINARY_DIR}/python_pkg/octogrid/__init__.py COPYONLY)
+  # Copy Python facade. Keep the list in sync with python/octogrid/*.py.
+  file(GLOB OCTOGRID_PYFILES ${CMAKE_SOURCE_DIR}/python/octogrid/*.py)
+  foreach(pyfile ${OCTOGRID_PYFILES})
+    get_filename_component(pyname ${pyfile} NAME)
+    configure_file(${pyfile} ${CMAKE_BINARY_DIR}/python_pkg/octogrid/${pyname}
+                   COPYONLY)
+  endforeach()
 endif()

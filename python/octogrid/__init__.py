@@ -20,6 +20,12 @@ from ._octogrid import (
     interpolate,
 )
 from ._octogrid import resample_from_latlon as _resample_native
+from ._xarray_accessor import register as _register_accessor
+
+
+# Best-effort xarray accessor registration. Silent no-op when xarray is
+# not importable in the current environment.
+_register_accessor()
 
 
 if TYPE_CHECKING:
