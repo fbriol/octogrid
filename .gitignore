@@ -1,0 +1,4 @@
+build/**
+docs/doxygen/**
+docs/doxygen_warnings.log
+.cache/**

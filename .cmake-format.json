@@ -1,0 +1,7 @@
+{
+    "lint": {
+        "disabled_codes": [
+            "C0307"
+        ]
+    }
+}

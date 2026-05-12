@@ -1,0 +1,62 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "nanobind>=2.2"]
+build-backend = "scikit_build_core.build"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 79
+exclude = [
+    "*.pyi",
+    "docs",
+    "examples",
+    "build",
+]
+
+[tool.ruff.lint.pycodestyle]
+max-line-length = 80
+
+[tool.ruff.lint]
+ignore = ["PLR0913", "D203", "D213"]
+select = [
+    "ANN",    # flake8-annotations
+    "B",      # flake8-bugbear
+    "C",      # flake8-comprehensions
+    "C4",     # comprehensions
+    "C90",    # mccabe
+    "D",      # docstring lints
+    "E",      # pycodestyle errors
+    "F",      # pyflakes
+    "FA",     # flake8-future-annotations
+    "FLY",    # flynt
+    "G",      # flake8-logging-format
+    "I",      # isort
+    "INT",    # flake8-gettext
+    "NPY002", # numpy-legacy-random
+    "PERF",   # Perflint
+    "PGH",    # pygrep-hooks
+    "PIE",    # misc lints
+    "PL",     # pylint
+    "PT",     # flake8-pytest-style
+    "PYI",    # flake8-pyi
+    "RSE",    # flake8-raise
+    "RUF",    # Ruff-specific rules
+    "SLOT",   # flake8-slots
+    "T10",    # flake8-debugger
+    "TCH",    # type-checking imports
+    "W",      # pycodestyle warnings
+    "YTT",    # flake8-2020
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/*.py" = ["PLR", "PT"]
+
+[tool.ruff.lint.isort]
+lines-after-imports = 2
+split-on-trailing-comma = false
+
+[tool.ruff.format]
+quote-style = "double"
+docstring-code-format = true
+
+[tool.mypy]
+exclude = ["build", "examples", "docs"]
