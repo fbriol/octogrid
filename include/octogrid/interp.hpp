@@ -7,7 +7,8 @@ namespace octogrid {
 
 // Nearest neighbour (B1): iso-latitude row search + 1D longitude search.
 // No global kd-tree. O(log n_rows + log n_lon).
-float interp_nearest(const CompressedField &f, double lat_deg, double lon_deg);
+auto interp_nearest(const CompressedField &f, double lat_deg, double lon_deg)
+    -> float;
 
 // Barycentric interpolation (B3): on the implicit triangulation formed by
 // pairs of adjacent latitude rows. For each query, locates the surrounding
@@ -17,8 +18,8 @@ float interp_nearest(const CompressedField &f, double lat_deg, double lon_deg);
 //
 // 3 codec fetches + ~10 FLOPs. The hot path under the compression-first
 // axiom (see plan §3.4).
-float interp_barycentric(const CompressedField &f, double lat_deg,
-                         double lon_deg);
+auto interp_barycentric(const CompressedField &f, double lat_deg,
+                        double lon_deg) -> float;
 
 // Batched API. Outputs values for `n` query points. Returns NaN for queries
 // outside the grid's latitude span.

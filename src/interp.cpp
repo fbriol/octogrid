@@ -1,7 +1,6 @@
 #include "octogrid/interp.hpp"
 
 #include <cmath>
-#include <limits>
 
 namespace octogrid {
 
@@ -10,7 +9,7 @@ namespace {
 // Normalize an angular value (degrees) to be the closest representative
 // of `lon` modulo 360 to the reference `ref` (i.e., lies in (ref-180,
 // ref+180]).
-inline double unwrap_to(double lon, double ref) {
+constexpr auto unwrap_to(double lon, double ref) -> double {
   double d = lon - ref;
   while (d > 180.0) {
     lon -= 360.0;
@@ -31,13 +30,15 @@ struct Vertex {
 
 // Compute the signed area of triangle (A, B, C) in (lon, lat) plane.
 // Sign convention: positive when (A, B, C) is counter-clockwise.
-inline double signed_area(const Vertex &A, const Vertex &B, const Vertex &C) {
+constexpr auto signed_area(const Vertex &A, const Vertex &B, const Vertex &C)
+    -> double {
   return (B.lon - A.lon) * (C.lat - A.lat) - (C.lon - A.lon) * (B.lat - A.lat);
 }
 
 }  // namespace
 
-float interp_nearest(const CompressedField &f, double lat_deg, double lon_deg) {
+auto interp_nearest(const CompressedField &f, double lat_deg, double lon_deg)
+    -> float {
   const auto &g = f.grid();
   std::size_t rN, rS;
   g.bracket_rows(lat_deg, rN, rS);
@@ -51,8 +52,8 @@ float interp_nearest(const CompressedField &f, double lat_deg, double lon_deg) {
   return f.at(g.linear_index(r, i));
 }
 
-float interp_barycentric(const CompressedField &f, double lat_deg,
-                         double lon_deg) {
+auto interp_barycentric(const CompressedField &f, double lat_deg,
+                        double lon_deg) -> float {
   const auto &g = f.grid();
   std::size_t rN, rS;
   g.bracket_rows(lat_deg, rN, rS);
@@ -81,14 +82,18 @@ float interp_barycentric(const CompressedField &f, double lat_deg,
   const double latS = g.lat_deg(rS);
 
   // Bring all longitudes into a common unwrapped frame around the query.
-  Vertex NW{unwrap_to(g.lon_deg(rN, wN), lon_deg), latN,
-            g.linear_index(rN, wN)};
-  Vertex NE{unwrap_to(g.lon_deg(rN, eN), lon_deg), latN,
-            g.linear_index(rN, eN)};
-  Vertex SW{unwrap_to(g.lon_deg(rS, wS), lon_deg), latS,
-            g.linear_index(rS, wS)};
-  Vertex SE{unwrap_to(g.lon_deg(rS, eS), lon_deg), latS,
-            g.linear_index(rS, eS)};
+  Vertex NW{.lon = unwrap_to(g.lon_deg(rN, wN), lon_deg),
+            .lat = latN,
+            .idx = g.linear_index(rN, wN)};
+  Vertex NE{.lon = unwrap_to(g.lon_deg(rN, eN), lon_deg),
+            .lat = latN,
+            .idx = g.linear_index(rN, eN)};
+  Vertex SW{.lon = unwrap_to(g.lon_deg(rS, wS), lon_deg),
+            .lat = latS,
+            .idx = g.linear_index(rS, wS)};
+  Vertex SE{.lon = unwrap_to(g.lon_deg(rS, eS), lon_deg),
+            .lat = latS,
+            .idx = g.linear_index(rS, eS)};
 
   // NE/SE wrap correction: when the row's n_lon is small, the "east"
   // neighbour of the western-most bracket index might wrap back near lon=0;
@@ -99,7 +104,7 @@ float interp_barycentric(const CompressedField &f, double lat_deg,
   if (SE.lon < SW.lon) SE.lon += 360.0;
 
   // Query point in the same frame.
-  Vertex Q{lon_deg, lat_deg, 0};
+  Vertex Q{.lon = lon_deg, .lat = lat_deg, .idx = 0};
 
   // Diagonal NW-SE splits the quad. Pick the triangle containing Q via
   // signed area test on the diagonal.
@@ -149,14 +154,16 @@ float interp_barycentric(const CompressedField &f, double lat_deg,
 
 void interp_barycentric_batch(const CompressedField &f, const double *lat,
                               const double *lon, std::size_t n, float *out) {
-  for (std::size_t i = 0; i < n; ++i)
+  for (std::size_t i = 0; i < n; ++i) {
     out[i] = interp_barycentric(f, lat[i], lon[i]);
+  }
 }
 
 void interp_nearest_batch(const CompressedField &f, const double *lat,
                           const double *lon, std::size_t n, float *out) {
-  for (std::size_t i = 0; i < n; ++i)
+  for (std::size_t i = 0; i < n; ++i) {
     out[i] = interp_nearest(f, lat[i], lon[i]);
+  }
 }
 
 }  // namespace octogrid
