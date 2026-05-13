@@ -19,19 +19,26 @@ class ReducedGrid {
   ReducedGrid(std::vector<double> latitudes_deg,
               std::vector<std::uint32_t> n_lon);
 
-  std::size_t n_rows() const { return lat_.size(); }
-  std::size_t n_points() const { return total_points_; }
-  std::uint32_t n_lon(std::size_t row) const { return n_lon_[row]; }
-  double lat_deg(std::size_t row) const { return lat_[row]; }
+  [[nodiscard]] auto n_rows() const -> std::size_t { return lat_.size(); }
+  [[nodiscard]] auto n_points() const -> std::size_t { return total_points_; }
+  [[nodiscard]] auto n_lon(std::size_t row) const -> std::uint32_t {
+    return n_lon_[row];
+  }
+  [[nodiscard]] auto lat_deg(std::size_t row) const -> double {
+    return lat_[row];
+  }
 
   // Offset of the first point of `row` in the flat 1D layout.
-  std::size_t row_offset(std::size_t row) const { return offsets_[row]; }
+  [[nodiscard]] auto row_offset(std::size_t row) const -> std::size_t {
+    return offsets_[row];
+  }
 
   // Longitude (degrees, in [0, 360)) of point i within row.
-  double lon_deg(std::size_t row, std::uint32_t i) const;
+  [[nodiscard]] auto lon_deg(std::size_t row, std::uint32_t i) const -> double;
 
   // Linear index <-> (row, col_in_row).
-  std::size_t linear_index(std::size_t row, std::uint32_t i) const {
+  [[nodiscard]] auto linear_index(std::size_t row, std::uint32_t i) const
+      -> std::size_t {
     return offsets_[row] + i;
   }
 
@@ -52,11 +59,12 @@ class ReducedGrid {
   // approximation of true Gaussian roots, sufficient for the prototype).
   // n_lon(row) = base + 4 * dist_from_pole_row, mirrored about equator —
   // the same growth law as ECMWF's Ox grid (base typically 20).
-  static ReducedGrid octahedral(std::size_t n_lat, std::uint32_t base = 20);
+  static auto octahedral(std::size_t n_lat, std::uint32_t base = 20)
+      -> ReducedGrid;
 
   // Factory: regular lat/lon grid (uniform n_lon across all rows).
   // Useful as baseline for benchmarks and tests.
-  static ReducedGrid regular(std::size_t n_lat, std::uint32_t n_lon);
+  static auto regular(std::size_t n_lat, std::uint32_t n_lon) -> ReducedGrid;
 
  private:
   std::vector<double> lat_;           // monotonic, decreasing (N -> S)
