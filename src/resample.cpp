@@ -11,8 +11,8 @@ namespace {
 // Find the largest index `i` such that arr[i] >= value (arr decreasing).
 // Returns 0 if value > arr[0], n-1 if value < arr[n-1]. Always returns a
 // valid bracket start: the pair (i, i+1) covers value for i < n-1.
-inline std::size_t bracket_decreasing(const double *arr, std::size_t n,
-                                      double value) {
+constexpr auto bracket_decreasing(const double *arr, std::size_t n,
+                                  double value) -> std::size_t {
   // Binary search for the first element strictly less than `value`. Since
   // arr is decreasing, std::lower_bound with greater-comparator finds the
   // first index whose entry is < value.
@@ -29,8 +29,8 @@ inline std::size_t bracket_decreasing(const double *arr, std::size_t n,
 // onto a common period). `lon_lo` is the unwrapped longitude of c0 with
 // the periodic correction baked in, useful for computing wfrac when the
 // query straddles the seam.
-inline void bracket_lon(const double *src_lons, std::size_t n, double lon_q,
-                        std::size_t &c0, std::size_t &c1, double &wfrac) {
+constexpr void bracket_lon(const double *src_lons, std::size_t n, double lon_q,
+                           std::size_t &c0, std::size_t &c1, double &wfrac) {
   // Normalize lon_q to [0, 360).
   double l = std::fmod(lon_q, 360.0);
   if (l < 0) l += 360.0;
@@ -71,8 +71,9 @@ void resample_from_latlon(const ReducedGrid &target, const double *src_lats,
     std::size_t latN, latS;
     // Clamp out-of-range queries by returning NaN.
     bool lat_in_range = true;
-    if (lat_q > src_lats[0] || lat_q < src_lats[n_src_lats - 1])
+    if (lat_q > src_lats[0] || lat_q < src_lats[n_src_lats - 1]) {
       lat_in_range = false;
+    }
     if (lat_in_range) {
       const std::size_t b = bracket_decreasing(src_lats, n_src_lats, lat_q);
       latN = b;
@@ -103,8 +104,8 @@ void resample_from_latlon(const ReducedGrid &target, const double *src_lats,
       const float vSW = src_data[latS * n_src_lons + cW];
       const float vSE = src_data[latS * n_src_lons + cE];
 
-      const float vN = static_cast<float>((1.0 - u) * vNW + u * vNE);
-      const float vS = static_cast<float>((1.0 - u) * vSW + u * vSE);
+      const auto vN = static_cast<float>((1.0 - u) * vNW + u * vNE);
+      const auto vS = static_cast<float>((1.0 - u) * vSW + u * vSE);
       out[row_off + i] = static_cast<float>((1.0 - t) * vN + t * vS);
     }
   }
