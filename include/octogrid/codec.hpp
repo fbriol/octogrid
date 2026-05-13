@@ -27,7 +27,7 @@ class Codec {
   virtual void encode(const float *values, std::size_t n) = 0;
 
   // Decode a single value at linear index `idx`.
-  virtual float decode_one(std::size_t idx) const = 0;
+  [[nodiscard]] virtual auto decode_one(std::size_t idx) const -> float = 0;
 
   // Decode `k` values at the given indices into `out`. Default impl loops.
   virtual void decode_gather(const std::size_t *indices, std::size_t k,
@@ -36,24 +36,23 @@ class Codec {
   }
 
   // RAM footprint of the compressed representation (bytes).
-  virtual std::size_t footprint_bytes() const = 0;
+  [[nodiscard]] virtual auto footprint_bytes() const -> std::size_t = 0;
 
   // Codec name (for debugging / logging).
-  virtual const char *name() const = 0;
+  [[nodiscard]] virtual auto name() const -> const char * = 0;
 
   // Serialize the codec's internal state to a contiguous byte buffer.
   // Layout is codec-specific and not stable across major versions; pair
   // each serialized blob with the codec name and a format version stored
   // by the caller.
-  virtual std::vector<std::uint8_t> serialize() const = 0;
+  [[nodiscard]] virtual auto serialize() const -> std::vector<std::uint8_t> = 0;
 };
 
 // Reconstruct a codec from a name + a previously-serialized blob.
 // `grid` is needed by codecs whose state depends on row offsets.
-std::unique_ptr<Codec> deserialize_codec(const class ReducedGrid &grid,
-                                         const std::string &name,
-                                         const std::uint8_t *data,
-                                         std::size_t size);
+auto deserialize_codec(const class ReducedGrid &grid, const std::string &name,
+                       const std::uint8_t *data, std::size_t size)
+    -> std::unique_ptr<Codec>;
 
 // ---- Concrete codecs ------------------------------------------------------
 
@@ -62,14 +61,16 @@ std::unique_ptr<Codec> deserialize_codec(const class ReducedGrid &grid,
 class RawFloat32Codec : public Codec {
  public:
   void encode(const float *values, std::size_t n) override;
-  float decode_one(std::size_t idx) const override { return data_[idx]; }
-  std::size_t footprint_bytes() const override {
+  [[nodiscard]] auto decode_one(std::size_t idx) const -> float override {
+    return data_[idx];
+  }
+  [[nodiscard]] auto footprint_bytes() const -> std::size_t override {
     return data_.size() * sizeof(float);
   }
-  const char *name() const override { return "raw"; }
-  std::vector<std::uint8_t> serialize() const override;
-  static std::unique_ptr<RawFloat32Codec> deserialize(const std::uint8_t *data,
-                                                      std::size_t size);
+  [[nodiscard]] auto name() const -> const char * override { return "raw"; }
+  [[nodiscard]] auto serialize() const -> std::vector<std::uint8_t> override;
+  static auto deserialize(const std::uint8_t *data, std::size_t size)
+      -> std::unique_ptr<RawFloat32Codec>;
 
  private:
   std::vector<float> data_;
@@ -80,12 +81,16 @@ class RawFloat32Codec : public Codec {
 class Bfloat16Codec : public Codec {
  public:
   void encode(const float *values, std::size_t n) override;
-  float decode_one(std::size_t idx) const override;
-  std::size_t footprint_bytes() const override { return data_.size() * 2; }
-  const char *name() const override { return "bfloat16"; }
-  std::vector<std::uint8_t> serialize() const override;
-  static std::unique_ptr<Bfloat16Codec> deserialize(const std::uint8_t *data,
-                                                    std::size_t size);
+  [[nodiscard]] auto decode_one(std::size_t idx) const -> float override;
+  [[nodiscard]] auto footprint_bytes() const -> std::size_t override {
+    return data_.size() * 2;
+  }
+  [[nodiscard]] auto name() const -> const char * override {
+    return "bfloat16";
+  }
+  [[nodiscard]] auto serialize() const -> std::vector<std::uint8_t> override;
+  static auto deserialize(const std::uint8_t *data, std::size_t size)
+      -> std::unique_ptr<Bfloat16Codec>;
 
  private:
   std::vector<std::uint16_t> data_;
@@ -103,13 +108,15 @@ class Uint16Codec : public Codec {
   explicit Uint16Codec(std::vector<std::size_t> tile_offsets);
 
   void encode(const float *values, std::size_t n) override;
-  float decode_one(std::size_t idx) const override;
-  std::size_t footprint_bytes() const override;
-  const char *name() const override { return "uint16-tiled"; }
-  std::vector<std::uint8_t> serialize() const override;
-  static std::unique_ptr<Uint16Codec> deserialize(
-      std::vector<std::size_t> tile_offsets, const std::uint8_t *data,
-      std::size_t size);
+  [[nodiscard]] auto decode_one(std::size_t idx) const -> float override;
+  [[nodiscard]] auto footprint_bytes() const -> std::size_t override;
+  [[nodiscard]] auto name() const -> const char * override {
+    return "uint16-tiled";
+  }
+  [[nodiscard]] auto serialize() const -> std::vector<std::uint8_t> override;
+  static auto deserialize(std::vector<std::size_t> tile_offsets,
+                          const std::uint8_t *data, std::size_t size)
+      -> std::unique_ptr<Uint16Codec>;
 
  private:
   std::vector<std::size_t> tile_offsets_;  // size n_tiles + 1
@@ -119,19 +126,20 @@ class Uint16Codec : public Codec {
 };
 
 // Factory helper: uint16 codec with one tile per grid row.
-std::unique_ptr<Codec> make_uint16_row_tiled(const class ReducedGrid &grid);
+auto make_uint16_row_tiled(const class ReducedGrid &grid)
+    -> std::unique_ptr<Codec>;
 
 // Factory helper: bfloat16 codec (no tiling needed).
-std::unique_ptr<Codec> make_bfloat16();
+auto make_bfloat16() -> std::unique_ptr<Codec>;
 
 // Factory helper: raw float32 codec (no compression).
-std::unique_ptr<Codec> make_raw();
+auto make_raw() -> std::unique_ptr<Codec>;
 
 #ifdef OCTOGRID_WITH_ZFP
 // C3: ZFP fixed-rate, 1D blocks of 4 values. Random access by block.
 // `rate` = bits per value (e.g. 8 → ratio ×4, 4 → ratio ×8, 16 → ratio ×2).
 // Must be a positive integer; ZFP uses rate*4 bits per 4-value block.
-std::unique_ptr<Codec> make_zfp_fixed_rate(unsigned rate);
+auto make_zfp_fixed_rate(unsigned rate) -> std::unique_ptr<Codec>;
 
 // C3+: Adaptive ZFP. Per-tile rate selection driven by an error budget,
 // with an outlier patch layer for values that the base codec can't represent
@@ -146,9 +154,9 @@ std::unique_ptr<Codec> make_zfp_fixed_rate(unsigned rate);
 //   - Bounds the worst-case error to `epsilon` everywhere by construction.
 //   - Decode cost: +1 binary search per query (in outlier table) and +1
 //     load of per-tile rate.
-std::unique_ptr<Codec> make_zfp_adaptive(
-    const class ReducedGrid &grid, double epsilon,
-    double max_outlier_fraction_per_tile = 0.01);
+auto make_zfp_adaptive(const class ReducedGrid &grid, double epsilon,
+                       double max_outlier_fraction_per_tile = 0.01)
+    -> std::unique_ptr<Codec>;
 #endif
 
 }  // namespace octogrid
