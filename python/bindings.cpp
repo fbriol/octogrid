@@ -15,59 +15,65 @@
 #include "octogrid/resample.hpp"
 
 namespace nb = nanobind;
-using namespace octogrid;
 
 // Aliases for 1D float32 / float64 contiguous CPU arrays.
 using FloatArray =
     nb::ndarray<const float, nb::ndim<1>, nb::c_contig, nb::device::cpu>;
+
 using DoubleArray =
     nb::ndarray<const double, nb::ndim<1>, nb::c_contig, nb::device::cpu>;
+
 // Return type: a numpy float32 array owned by a capsule that releases the
 // buffer when garbage-collected.
 using FloatOut = nb::ndarray<float, nb::numpy, nb::ndim<1>>;
 
 namespace {
 
-CompressedField make_field(const ReducedGrid &grid,
-                           const std::string &codec_name, FloatArray values,
-                           unsigned zfp_rate, double epsilon,
-                           double max_outlier_frac) {
-  if (values.size() != grid.n_points())
+auto make_field(const octogrid::ReducedGrid &grid,
+                const std::string &codec_name, FloatArray values,
+                unsigned zfp_rate, double epsilon, double max_outlier_frac)
+    -> octogrid::CompressedField {
+  if (values.size() != grid.n_points()) {
     throw std::invalid_argument("values length != grid.n_points()");
-  std::unique_ptr<Codec> codec;
+  }
+  std::unique_ptr<octogrid::Codec> codec;
   if (codec_name == "raw") {
-    codec = make_raw();
+    codec = octogrid::make_raw();
   } else if (codec_name == "bfloat16") {
-    codec = make_bfloat16();
+    codec = octogrid::make_bfloat16();
   } else if (codec_name == "uint16") {
-    codec = make_uint16_row_tiled(grid);
+    codec = octogrid::make_uint16_row_tiled(grid);
   } else if (codec_name == "zfp") {
 #ifdef OCTOGRID_WITH_ZFP
-    codec = make_zfp_fixed_rate(zfp_rate);
+    codec = octogrid::make_zfp_fixed_rate(zfp_rate);
 #else
     throw std::runtime_error("zfp codec not compiled in");
 #endif
   } else if (codec_name == "zfp_adaptive") {
 #ifdef OCTOGRID_WITH_ZFP
-    codec = make_zfp_adaptive(grid, epsilon, max_outlier_frac);
+    codec = octogrid::make_zfp_adaptive(grid, epsilon, max_outlier_frac);
 #else
     throw std::runtime_error("zfp codec not compiled in");
 #endif
   } else {
     throw std::invalid_argument("unknown codec: " + codec_name);
   }
-  return CompressedField(grid, std::move(codec), values.data());
+  return {grid, std::move(codec), values.data()};
 }
 
-FloatOut batch_interp(const CompressedField &f, DoubleArray lat,
-                      DoubleArray lon, const std::string &method) {
-  if (lat.size() != lon.size())
+auto batch_interp(const octogrid::CompressedField &f, DoubleArray lat,
+                  DoubleArray lon, const std::string &method) -> FloatOut {
+  if (lat.size() != lon.size()) {
     throw std::invalid_argument("lat and lon must have same length");
+  }
   const std::size_t n = lat.size();
 
   // Use a unique_ptr so that any exception thrown below cleans the buffer
   // without colliding with the capsule deleter we attach on success.
+
+  // NOLINTNEXTLINE(modernize-avoid-c-arrays)
   std::unique_ptr<float[]> buf(new float[n]);
+
   if (method == "barycentric") {
     interp_barycentric_batch(f, lat.data(), lon.data(), n, buf.get());
   } else if (method == "nearest") {
@@ -78,8 +84,9 @@ FloatOut batch_interp(const CompressedField &f, DoubleArray lat,
   float *data = buf.release();
   nb::capsule owner(data,
                     [](void *p) noexcept { delete[] static_cast<float *>(p); });
+  // NOLINTNEXTLINE(modernize-avoid-c-arrays)
   size_t shape[1] = {n};
-  return FloatOut(data, /*ndim=*/1, shape, owner);
+  return {data, /*ndim=*/1, shape, owner};
 }
 
 // Bilinear resampling from a regular lat/lon source onto a ReducedGrid.
@@ -89,22 +96,25 @@ FloatOut batch_interp(const CompressedField &f, DoubleArray lat,
 using Float2D =
     nb::ndarray<const float, nb::ndim<2>, nb::c_contig, nb::device::cpu>;
 
-FloatOut resample(const ReducedGrid &grid, DoubleArray src_lats,
-                  DoubleArray src_lons, Float2D src_arr) {
+auto resample(const octogrid::ReducedGrid &grid, DoubleArray src_lats,
+              DoubleArray src_lons, Float2D src_arr) -> FloatOut {
   const std::size_t n_lat = src_lats.size();
   const std::size_t n_lon = src_lons.size();
-  if (src_arr.shape(0) != n_lat || src_arr.shape(1) != n_lon)
+  if (src_arr.shape(0) != n_lat || src_arr.shape(1) != n_lon) {
     throw std::invalid_argument("src_arr shape does not match (n_lat, n_lon)");
+  }
 
   const std::size_t n = grid.n_points();
+  // NOLINTNEXTLINE(modernize-avoid-c-arrays)
   std::unique_ptr<float[]> buf(new float[n]);
   resample_from_latlon(grid, src_lats.data(), n_lat, src_lons.data(), n_lon,
                        src_arr.data(), buf.get());
   float *data = buf.release();
   nb::capsule owner(data,
                     [](void *p) noexcept { delete[] static_cast<float *>(p); });
+  // NOLINTNEXTLINE(modernize-avoid-c-arrays)
   size_t shape[1] = {n};
-  return FloatOut(data, /*ndim=*/1, shape, owner);
+  return {data, /*ndim=*/1, shape, owner};
 }
 
 }  // namespace
@@ -112,29 +122,30 @@ FloatOut resample(const ReducedGrid &grid, DoubleArray src_lats,
 NB_MODULE(_octogrid, m) {
   m.doc() = "octogrid — compact in-memory reduced grids and interpolation";
 
-  nb::class_<ReducedGrid>(m, "ReducedGrid")
+  nb::class_<octogrid::ReducedGrid>(m, "ReducedGrid")
       .def(nb::init<std::vector<double>, std::vector<std::uint32_t>>(),
            nb::arg("latitudes_deg"), nb::arg("n_lon"))
-      .def_static("octahedral", &ReducedGrid::octahedral, nb::arg("n_lat"),
-                  nb::arg("base") = 20u)
-      .def_static("regular", &ReducedGrid::regular, nb::arg("n_lat"),
+      .def_static("octahedral", &octogrid::ReducedGrid::octahedral,
+                  nb::arg("n_lat"), nb::arg("base") = 20u)
+      .def_static("regular", &octogrid::ReducedGrid::regular, nb::arg("n_lat"),
                   nb::arg("n_lon"))
-      .def_prop_ro("n_rows", &ReducedGrid::n_rows)
-      .def_prop_ro("n_points", &ReducedGrid::n_points)
-      .def("n_lon", &ReducedGrid::n_lon, nb::arg("row"))
-      .def("lat_deg", &ReducedGrid::lat_deg, nb::arg("row"));
+      .def_prop_ro("n_rows", &octogrid::ReducedGrid::n_rows)
+      .def_prop_ro("n_points", &octogrid::ReducedGrid::n_points)
+      .def("n_lon", &octogrid::ReducedGrid::n_lon, nb::arg("row"))
+      .def("lat_deg", &octogrid::ReducedGrid::lat_deg, nb::arg("row"));
 
-  nb::class_<CompressedField>(m, "CompressedField")
-      .def_prop_ro("footprint_bytes", &CompressedField::footprint_bytes)
-      .def_prop_ro("codec_name",
-                   [](const CompressedField &f) { return f.codec().name(); })
+  nb::class_<octogrid::CompressedField>(m, "CompressedField")
+      .def_prop_ro("footprint_bytes",
+                   &octogrid::CompressedField::footprint_bytes)
+      .def_prop_ro(
+          "codec_name",
+          [](const octogrid::CompressedField &f) { return f.codec().name(); })
       .def_prop_ro(
           "grid",
-          [](const CompressedField &f) -> const ReducedGrid & {
-            return f.grid();
-          },
+          [](const octogrid::CompressedField &f)
+              -> const octogrid::ReducedGrid & { return f.grid(); },
           nb::rv_policy::reference_internal)
-      .def_prop_ro("n_points", [](const CompressedField &f) {
+      .def_prop_ro("n_points", [](const octogrid::CompressedField &f) {
         return f.grid().n_points();
       });
 
@@ -161,7 +172,7 @@ NB_MODULE(_octogrid, m) {
 
   m.def(
       "_serialize_codec",
-      [](const CompressedField &f) {
+      [](const octogrid::CompressedField &f) {
         const auto blob = f.codec().serialize();
         // Copy out via capsule-owned uint8 ndarray.
         auto *data = new std::uint8_t[blob.size()];
@@ -169,6 +180,7 @@ NB_MODULE(_octogrid, m) {
         nb::capsule owner(data, [](void *p) noexcept {
           delete[] static_cast<std::uint8_t *>(p);
         });
+        // NOLINTNEXTLINE(modernize-avoid-c-arrays)
         size_t shape[1] = {blob.size()};
         return nb::ndarray<std::uint8_t, nb::numpy, nb::ndim<1>>(
             data, /*ndim=*/1, shape, owner);
@@ -178,13 +190,13 @@ NB_MODULE(_octogrid, m) {
 
   m.def(
       "_field_from_blob",
-      [](const ReducedGrid &grid, const std::string &codec_name,
+      [](const octogrid::ReducedGrid &grid, const std::string &codec_name,
          nb::ndarray<const std::uint8_t, nb::ndim<1>, nb::c_contig,
                      nb::device::cpu>
              blob) {
         auto codec =
             deserialize_codec(grid, codec_name, blob.data(), blob.size());
-        return CompressedField(grid, std::move(codec));
+        return octogrid::CompressedField(grid, std::move(codec));
       },
       nb::arg("grid"), nb::arg("codec_name"), nb::arg("blob"),
       "Rebuild a CompressedField from a grid + codec name + serialized blob.");
