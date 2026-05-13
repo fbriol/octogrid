@@ -85,7 +85,9 @@ void ReducedGrid::bracket_lon(std::size_t row, double lon_deg,
   const double step = 360.0 / static_cast<double>(n);
   // Wrap lon to [0, 360).
   double l = std::fmod(lon_deg, 360.0);
-  if (l < 0) l += 360.0;
+  if (l < 0) {
+    l += 360.0;
+  }
   const double f = l / step;
   const std::uint32_t w = static_cast<std::uint32_t>(std::floor(f)) % n;
   const std::uint32_t e = (w + 1) % n;
