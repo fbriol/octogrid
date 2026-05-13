@@ -317,8 +317,8 @@ class ZfpCodec : public Codec {
     return out;
   }
 
-  static std::unique_ptr<ZfpCodec> deserialize(const std::uint8_t *data,
-                                               std::size_t size) {
+  static auto deserialize(const std::uint8_t *data, std::size_t size)
+      -> std::unique_ptr<ZfpCodec> {
     const std::size_t header =
         sizeof(std::uint32_t) + 4 * sizeof(std::uint64_t);
     if (size < header) throw std::invalid_argument("zfp codec: blob too small");
