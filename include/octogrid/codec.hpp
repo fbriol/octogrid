@@ -32,14 +32,18 @@ class Codec {
   // Decode `k` values at the given indices into `out`. Default impl loops.
   virtual void decode_gather(const std::size_t *indices, std::size_t k,
                              float *out) const {
-    for (std::size_t i = 0; i < k; ++i) out[i] = decode_one(indices[i]);
+    for (std::size_t i = 0; i < k; ++i) {
+      out[i] = decode_one(indices[i]);
+    }
   }
 
   // Decode all values into a flat float32 buffer of length `n`. Default
   // implementation loops decode_one; concrete codecs override when a
   // bulk path is faster (e.g. a memcpy for the raw codec).
   virtual void decode_all(float *out, std::size_t n) const {
-    for (std::size_t i = 0; i < n; ++i) out[i] = decode_one(i);
+    for (std::size_t i = 0; i < n; ++i) {
+      out[i] = decode_one(i);
+    }
   }
 
   // RAM footprint of the compressed representation (bytes).
