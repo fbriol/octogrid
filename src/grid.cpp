@@ -43,7 +43,9 @@ void ReducedGrid::fill_latitudes(double *out) const {
     const double lat = lat_[r];
     const std::uint32_t n = n_lon_[r];
     double *row = out + offsets_[r];
-    for (std::uint32_t i = 0; i < n; ++i) row[i] = lat;
+    for (std::uint32_t i = 0; i < n; ++i) {
+      row[i] = lat;
+    }
   }
 }
 
@@ -52,7 +54,9 @@ void ReducedGrid::fill_longitudes(double *out) const {
     const std::uint32_t n = n_lon_[r];
     const double step = 360.0 / static_cast<double>(n);
     double *row = out + offsets_[r];
-    for (std::uint32_t i = 0; i < n; ++i) row[i] = i * step;
+    for (std::uint32_t i = 0; i < n; ++i) {
+      row[i] = i * step;
+    }
   }
 }
 
