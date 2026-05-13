@@ -18,14 +18,16 @@ class CompressedField {
   // Build from an already-encoded codec (e.g. after deserialize).
   CompressedField(ReducedGrid grid, std::unique_ptr<Codec> codec);
 
-  const ReducedGrid &grid() const { return grid_; }
-  const Codec &codec() const { return *codec_; }
+  [[nodiscard]] auto grid() const -> const ReducedGrid & { return grid_; }
+  [[nodiscard]] auto codec() const -> const Codec & { return *codec_; }
 
-  float at(std::size_t linear_idx) const {
+  [[nodiscard]] auto at(std::size_t linear_idx) const -> float {
     return codec_->decode_one(linear_idx);
   }
 
-  std::size_t footprint_bytes() const { return codec_->footprint_bytes(); }
+  [[nodiscard]] auto footprint_bytes() const -> std::size_t {
+    return codec_->footprint_bytes();
+  }
 
  private:
   ReducedGrid grid_;
