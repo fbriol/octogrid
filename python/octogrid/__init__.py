@@ -20,6 +20,7 @@ from ._octogrid import (
     interpolate,
 )
 from ._octogrid import resample_from_latlon as _resample_native
+from ._stack import STACK_FORMAT_VERSION, FieldStack, open_stack
 from ._xarray_accessor import register as _register_accessor
 
 
@@ -215,14 +216,17 @@ def open(store: Store) -> CompressedField:
 
 
 __all__ = [
+    "STACK_FORMAT_VERSION",
     "ZARR_FORMAT_VERSION",
     "CompressedField",
+    "FieldStack",
     "ReducedGrid",
     "compress",
     "from_xarray",
     "interpolate",
     "octahedral_matching_latlon",
     "open",
+    "open_stack",
     "resample_from_latlon",
     "to_zarr",
 ]
