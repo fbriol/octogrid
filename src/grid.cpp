@@ -33,7 +33,7 @@ ReducedGrid::ReducedGrid(std::vector<double> latitudes_deg,
   total_points_ = offsets_.back();
 }
 
-double ReducedGrid::lon_deg(std::size_t row, std::uint32_t i) const {
+auto ReducedGrid::lon_deg(std::size_t row, std::uint32_t i) const -> double {
   const double step = 360.0 / static_cast<double>(n_lon_[row]);
   return i * step;
 }
