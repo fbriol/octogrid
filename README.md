@@ -176,6 +176,73 @@ topology, metadata — is plain Zarr.
 
 ---
 
+## Manipulating fields as arrays
+
+Every `CompressedField` decodes back to a flat float32 NumPy array via
+`field.to_numpy()`, and the grid exposes its per-point coordinates via
+`grid.latitudes()` / `grid.longitudes()`. Everything downstream is then
+just NumPy / xarray — for example, a **streaming mean and variance** over
+a year of daily SLA fields without ever materialising the full stack in
+RAM:
+
+```python
+import numpy as np, octogrid
+
+daily = [octogrid.open(f"sla_{day}.zarr") for day in days_2024]
+n = daily[0].n_points
+
+# Pass 1 — mean
+total = np.zeros(n, dtype=np.float64)
+n_obs = np.zeros(n, dtype=np.int64)
+for f in daily:
+    v = f.to_numpy()
+    ok = np.isfinite(v)
+    total[ok] += v[ok]
+    n_obs[ok] += 1
+mean = (total / n_obs).astype(np.float32)
+
+# Pass 2 — variance
+ssq = np.zeros(n, dtype=np.float64)
+for f in daily:
+    v = f.to_numpy()
+    ok = np.isfinite(v)
+    ssq[ok] += (v[ok] - mean[ok]) ** 2
+variance = (ssq / np.maximum(n_obs - 1, 1)).astype(np.float32)
+
+# Optional: re-wrap the result on the same grid for further use
+mean_field = octogrid.compress(daily[0].grid, "raw", mean)
+```
+
+Each iteration keeps exactly one daily field decompressed in memory, so
+the compression gains survive the analysis pipeline.
+
+## Visualizing a field
+
+Two complementary renderings, both straight NumPy + matplotlib:
+
+```python
+import matplotlib.pyplot as plt
+import numpy as np, octogrid
+
+field = ...
+
+# 1. Native scatter — shows the reduced topology (cells thin out polewards).
+lats = field.grid.latitudes()
+lons = field.grid.longitudes()
+plt.scatter(lons, lats, c=field.to_numpy(), s=1.0, cmap="RdBu_r")
+
+# 2. Rendered on a regular lat/lon viewport (barycentric interpolation).
+nlat, nlon = 360, 720
+lat_v = np.linspace(89.75, -89.75, nlat)
+lon_v = np.linspace(0.25, 359.75, nlon)
+lg, og = np.meshgrid(lat_v, lon_v, indexing="ij")
+img = octogrid.interpolate(field, lg.ravel(), og.ravel()).reshape(nlat, nlon)
+plt.imshow(img, extent=(0, 360, -90, 90), origin="upper", cmap="RdBu_r")
+```
+
+A turnkey script generating both panels is in
+[`examples/visualize.py`](examples/visualize.py).
+
 ## API summary
 
 ```python
@@ -186,6 +253,10 @@ octogrid.octahedral_matching_latlon(src_lons)
 octogrid.resample_from_latlon(grid, lats, lons, src_arr)
 octogrid.compress(grid, codec, values, **codec_kwargs)
 octogrid.interpolate(field, lat_deg, lon_deg, method="barycentric")
+
+grid.latitudes()                           # flat per-point coords
+grid.longitudes()
+field.to_numpy()                           # decode every value to a numpy float32 array
 
 octogrid.from_xarray(da)                   # high-level: lat/lon → topology field
 octogrid.to_zarr(field, store)             # persist (Zarr v3)

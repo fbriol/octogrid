@@ -38,6 +38,24 @@ auto ReducedGrid::lon_deg(std::size_t row, std::uint32_t i) const -> double {
   return i * step;
 }
 
+void ReducedGrid::fill_latitudes(double *out) const {
+  for (std::size_t r = 0; r < lat_.size(); ++r) {
+    const double lat = lat_[r];
+    const std::uint32_t n = n_lon_[r];
+    double *row = out + offsets_[r];
+    for (std::uint32_t i = 0; i < n; ++i) row[i] = lat;
+  }
+}
+
+void ReducedGrid::fill_longitudes(double *out) const {
+  for (std::size_t r = 0; r < lat_.size(); ++r) {
+    const std::uint32_t n = n_lon_[r];
+    const double step = 360.0 / static_cast<double>(n);
+    double *row = out + offsets_[r];
+    for (std::uint32_t i = 0; i < n; ++i) row[i] = i * step;
+  }
+}
+
 void ReducedGrid::bracket_rows(double lat_deg, std::size_t &north,
                                std::size_t &south) const {
   // lat_ is strictly decreasing. Use binary search for the first index whose

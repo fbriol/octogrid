@@ -26,6 +26,7 @@ using DoubleArray =
 // Return type: a numpy float32 array owned by a capsule that releases the
 // buffer when garbage-collected.
 using FloatOut = nb::ndarray<float, nb::numpy, nb::ndim<1>>;
+using DoubleOut = nb::ndarray<double, nb::numpy, nb::ndim<1>>;
 
 namespace {
 
@@ -132,7 +133,39 @@ NB_MODULE(_octogrid, m) {
       .def_prop_ro("n_rows", &octogrid::ReducedGrid::n_rows)
       .def_prop_ro("n_points", &octogrid::ReducedGrid::n_points)
       .def("n_lon", &octogrid::ReducedGrid::n_lon, nb::arg("row"))
-      .def("lat_deg", &octogrid::ReducedGrid::lat_deg, nb::arg("row"));
+      .def("lat_deg", &octogrid::ReducedGrid::lat_deg, nb::arg("row"))
+      .def(
+          "latitudes",
+          [](const octogrid::ReducedGrid &g) {
+            const std::size_t n = g.n_points();
+            // NOLINTNEXTLINE(modernize-avoid-c-arrays)
+            std::unique_ptr<double[]> buf(new double[n]);
+            g.fill_latitudes(buf.get());
+            double *data = buf.release();
+            nb::capsule owner(data, [](void *p) noexcept {
+              delete[] static_cast<double *>(p);
+            });
+            // NOLINTNEXTLINE(modernize-avoid-c-arrays)
+            size_t shape[1] = {n};
+            return DoubleOut(data, /*ndim=*/1, shape, owner);
+          },
+          "Latitude (deg) of every grid point, flat — shape (n_points,).")
+      .def(
+          "longitudes",
+          [](const octogrid::ReducedGrid &g) {
+            const std::size_t n = g.n_points();
+            // NOLINTNEXTLINE(modernize-avoid-c-arrays)
+            std::unique_ptr<double[]> buf(new double[n]);
+            g.fill_longitudes(buf.get());
+            double *data = buf.release();
+            nb::capsule owner(data, [](void *p) noexcept {
+              delete[] static_cast<double *>(p);
+            });
+            // NOLINTNEXTLINE(modernize-avoid-c-arrays)
+            size_t shape[1] = {n};
+            return DoubleOut(data, /*ndim=*/1, shape, owner);
+          },
+          "Longitude (deg, in [0, 360)) of every grid point, flat.");
 
   nb::class_<octogrid::CompressedField>(m, "CompressedField")
       .def_prop_ro("footprint_bytes",
@@ -145,9 +178,27 @@ NB_MODULE(_octogrid, m) {
           [](const octogrid::CompressedField &f)
               -> const octogrid::ReducedGrid & { return f.grid(); },
           nb::rv_policy::reference_internal)
-      .def_prop_ro("n_points", [](const octogrid::CompressedField &f) {
-        return f.grid().n_points();
-      });
+      .def_prop_ro("n_points",
+                   [](const octogrid::CompressedField &f) {
+                     return f.grid().n_points();
+                   })
+      .def(
+          "to_numpy",
+          [](const octogrid::CompressedField &f) {
+            const std::size_t n = f.grid().n_points();
+            // NOLINTNEXTLINE(modernize-avoid-c-arrays)
+            std::unique_ptr<float[]> buf(new float[n]);
+            f.codec().decode_all(buf.get(), n);
+            float *data = buf.release();
+            nb::capsule owner(data, [](void *p) noexcept {
+              delete[] static_cast<float *>(p);
+            });
+            // NOLINTNEXTLINE(modernize-avoid-c-arrays)
+            size_t shape[1] = {n};
+            return FloatOut(data, /*ndim=*/1, shape, owner);
+          },
+          "Decode every value into a fresh numpy float32 array of length "
+          "n_points. NaN is preserved.");
 
   m.def("compress", &make_field, nb::arg("grid"), nb::arg("codec"),
         nb::arg("values"), nb::arg("zfp_rate") = 8u, nb::arg("epsilon") = 1e-3,

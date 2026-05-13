@@ -35,6 +35,13 @@ class Codec {
     for (std::size_t i = 0; i < k; ++i) out[i] = decode_one(indices[i]);
   }
 
+  // Decode all values into a flat float32 buffer of length `n`. Default
+  // implementation loops decode_one; concrete codecs override when a
+  // bulk path is faster (e.g. a memcpy for the raw codec).
+  virtual void decode_all(float *out, std::size_t n) const {
+    for (std::size_t i = 0; i < n; ++i) out[i] = decode_one(i);
+  }
+
   // RAM footprint of the compressed representation (bytes).
   [[nodiscard]] virtual auto footprint_bytes() const -> std::size_t = 0;
 
@@ -64,6 +71,7 @@ class RawFloat32Codec : public Codec {
   [[nodiscard]] auto decode_one(std::size_t idx) const -> float override {
     return data_[idx];
   }
+  void decode_all(float *out, std::size_t n) const override;
   [[nodiscard]] auto footprint_bytes() const -> std::size_t override {
     return data_.size() * sizeof(float);
   }

@@ -19,6 +19,10 @@ void RawFloat32Codec::encode(const float *values, std::size_t n) {
   data_.assign(values, values + n);
 }
 
+void RawFloat32Codec::decode_all(float *out, std::size_t n) const {
+  std::memcpy(out, data_.data(), n * sizeof(float));
+}
+
 std::vector<std::uint8_t> RawFloat32Codec::serialize() const {
   std::vector<std::uint8_t> out(data_.size() * sizeof(float));
   std::memcpy(out.data(), data_.data(), out.size());

@@ -42,6 +42,14 @@ class ReducedGrid {
     return offsets_[row] + i;
   }
 
+  // Fill `out` with the latitude (degrees) of every point, in linear order.
+  // `out` must have at least n_points() entries.
+  void fill_latitudes(double *out) const;
+
+  // Fill `out` with the longitude (degrees, in [0, 360)) of every point.
+  // `out` must have at least n_points() entries.
+  void fill_longitudes(double *out) const;
+
   // Find the two rows bracketing a query latitude (in degrees).
   // Returns (north_row, south_row). If lat is outside the grid in latitude,
   // both indices are clamped (the caller can detect by equality).
