@@ -10,20 +10,24 @@ namespace octogrid {
 ReducedGrid::ReducedGrid(std::vector<double> latitudes_deg,
                          std::vector<std::uint32_t> n_lon)
     : lat_(std::move(latitudes_deg)), n_lon_(std::move(n_lon)) {
-  if (lat_.size() != n_lon_.size())
+  if (lat_.size() != n_lon_.size()) {
     throw std::invalid_argument("latitudes and n_lon must have same length");
-  if (lat_.empty())
+  }
+  if (lat_.empty()) {
     throw std::invalid_argument("grid must have at least one row");
+  }
   // Enforce decreasing latitude order (N -> S). Detect strict monotonic.
   for (std::size_t i = 1; i < lat_.size(); ++i) {
-    if (!(lat_[i] < lat_[i - 1]))
+    if (!(lat_[i] < lat_[i - 1])) {
       throw std::invalid_argument("latitudes must be strictly decreasing");
+    }
   }
   offsets_.resize(lat_.size() + 1);
   offsets_[0] = 0;
   for (std::size_t i = 0; i < lat_.size(); ++i) {
-    if (n_lon_[i] == 0)
+    if (n_lon_[i] == 0) {
       throw std::invalid_argument("n_lon must be > 0 for every row");
+    }
     offsets_[i + 1] = offsets_[i] + n_lon_[i];
   }
   total_points_ = offsets_.back();
@@ -38,8 +42,8 @@ void ReducedGrid::bracket_rows(double lat_deg, std::size_t &north,
                                std::size_t &south) const {
   // lat_ is strictly decreasing. Use binary search for the first index whose
   // lat is <= lat_deg.
-  auto it = std::lower_bound(lat_.begin(), lat_.end(), lat_deg,
-                             [](double a, double b) { return a > b; });
+  auto it = std::ranges::lower_bound(lat_, lat_deg,
+                                     [](double a, double b) { return a > b; });
   if (it == lat_.begin()) {
     north = south = 0;  // query is north of grid
     return;
@@ -68,9 +72,11 @@ void ReducedGrid::bracket_lon(std::size_t row, double lon_deg,
   wfrac = f - std::floor(f);
 }
 
-ReducedGrid ReducedGrid::octahedral(std::size_t n_lat, std::uint32_t base) {
-  if (n_lat < 2 || (n_lat % 2) != 0)
+auto ReducedGrid::octahedral(std::size_t n_lat, std::uint32_t base)
+    -> ReducedGrid {
+  if (n_lat < 2 || (n_lat % 2) != 0) {
     throw std::invalid_argument("n_lat must be even and >= 2");
+  }
   // Equally spaced colatitudes: this is the prototype-quality approximation
   // of Gaussian roots (good enough for correctness of bracketing /
   // interpolation; the true Gaussian variant is a drop-in replacement).
@@ -87,10 +93,11 @@ ReducedGrid ReducedGrid::octahedral(std::size_t n_lat, std::uint32_t base) {
     const std::size_t d_pole = (i < half) ? i : (n_lat - 1 - i);
     n_lon[i] = base + 4 * static_cast<std::uint32_t>(d_pole);
   }
-  return ReducedGrid(std::move(lats), std::move(n_lon));
+  return {std::move(lats), std::move(n_lon)};
 }
 
-ReducedGrid ReducedGrid::regular(std::size_t n_lat, std::uint32_t n_lon_each) {
+auto ReducedGrid::regular(std::size_t n_lat, std::uint32_t n_lon_each)
+    -> ReducedGrid {
   if (n_lat < 2) throw std::invalid_argument("n_lat must be >= 2");
   std::vector<double> lats(n_lat);
   for (std::size_t i = 0; i < n_lat; ++i) {
@@ -98,7 +105,7 @@ ReducedGrid ReducedGrid::regular(std::size_t n_lat, std::uint32_t n_lon_each) {
     lats[i] = 90.0 - colat;
   }
   std::vector<std::uint32_t> n_lon(n_lat, n_lon_each);
-  return ReducedGrid(std::move(lats), std::move(n_lon));
+  return {std::move(lats), std::move(n_lon)};
 }
 
 }  // namespace octogrid
