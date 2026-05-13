@@ -153,7 +153,7 @@ NB_MODULE(_octogrid, m) {
         nb::arg("values"), nb::arg("zfp_rate") = 8u, nb::arg("epsilon") = 1e-3,
         nb::arg("max_outlier_frac") = 0.01,
         "Build a CompressedField. codec ∈ "
-        "{'bfloat16','uint16','zfp','zfp_adaptive'}. "
+        "{'raw','bfloat16','uint16','zfp','zfp_adaptive'}. "
         "zfp_rate (bits/value) only used for 'zfp'. "
         "epsilon, max_outlier_frac only used for 'zfp_adaptive'.");
 
