@@ -35,6 +35,9 @@ if(OCTOGRID_WITH_ZFP)
   set(ZFP_WITH_OPENMP
       OFF
       CACHE BOOL "" FORCE)
+  set(BUILD_SHARED_LIBS
+      OFF
+      CACHE BOOL "" FORCE)
   FetchContent_Declare(
     zfp
     GIT_REPOSITORY https://github.com/LLNL/zfp.git
@@ -88,4 +91,11 @@ if(OCTOGRID_BUILD_PYTHON)
     configure_file(${pyfile} ${CMAKE_BINARY_DIR}/python_pkg/octogrid/${pyname}
                    COPYONLY)
   endforeach()
+
+  # When built through scikit-build-core (pip install .), install the compiled
+  # extension into the octogrid package. The .py sources are picked up via
+  # [tool.scikit-build] wheel.packages.
+  if(SKBUILD)
+    install(TARGETS _octogrid LIBRARY DESTINATION octogrid)
+  endif()
 endif()

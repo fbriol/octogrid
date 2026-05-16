@@ -83,3 +83,15 @@ markers = [
 
 [project.optional-dependencies]
 test = ["pytest>=7", "xarray", "zarr>=3"]
+
+[tool.scikit-build]
+minimum-version = "0.10"
+cmake.version = ">=3.18"
+build-dir = "build/{wheel_tag}"
+wheel.packages = ["python/octogrid"]
+cmake.build-type = "Release"
+build.targets = ["_octogrid"]
+
+[tool.scikit-build.cmake.define]
+OCTOGRID_BUILD_TESTS = "OFF"
+OCTOGRID_BUILD_PYTHON = "ON"
